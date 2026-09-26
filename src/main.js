@@ -92,13 +92,16 @@ class Game {
       const [name, hours, pos, extra] = spec.split('|');
       return { name, hours: hours ? +hours : null, pos: pos ? pos.split(',').map(Number) : null, extra: extra || '' };
     });
+    const sw = +(params.get('snapw') || 0);
+    if (sw) { this.R.q.pixelRatio = 1; this.R.r.setPixelRatio(1); this.R.r.setSize(sw, Math.round(sw * 0.45), false); this.R.composer.setSize(sw, Math.round(sw * 0.45), false); this.R.camera.aspect = 1 / 0.45; this.R.camera.updateProjectionMatrix(); }
     for (const sh of shots) {
+      console.log('[snap] start', sh.name, performance.now() | 0);
       if (sh.hours !== null) this.state.hours = sh.hours;
       if (sh.pos) { const [x, z, yaw, pitch] = sh.pos; this.player.pos.set(x, 0, z); this.player.yaw = yaw; this.player.pitch = pitch || 0; }
       if (sh.extra.includes('fire')) { this.fire.addFuel(1); this.fire.ignite(); this.fire.intensity = 1; this.fireLogs.visible = true; }
       if (sh.extra.includes('rain')) this.rain = 1;
       this.state.timeScale = 0; this.sky.envTimer = 99; this.snapping = true;
-      for (let k = 0; k < 3; k++) { this.frame(1 / 30); await new Promise((r) => setTimeout(r, 0)); }
+      const nf = +(params.get('snapf') || 2); for (let k = 0; k < nf; k++) { this.frame(1 / 30); console.log('[snap] frame', k, performance.now() | 0); await new Promise((r) => setTimeout(r, 0)); }
       const png = this.R.r.domElement.toDataURL('image/jpeg', 0.85);
       const i = this.R.r.info;
       await fetch('/__snap', { method: 'POST', body: JSON.stringify({ name: sh.name, png, info: { fps: $('fps').textContent, tris: i.render.triangles, calls: i.render.calls, trees: this.world.treeCount, ua: navigator.userAgent, gpu: this.gpuName() } }) }).catch(() => {});
