@@ -162,7 +162,7 @@ function bendNormalsOutward(g, cy, amount = 0.65) {
 // conifer builder: whorls of branch cards
 function buildConifer(rnd, { h = 16, cards = 200, crown = 0.78, radius = 3.4, droop = 0.35, cardLen = 2.4 }) {
   const parts = [];
-  const base = cardGeo(cardLen, cardLen * 0.95, droop, 3);
+  const base = cardGeo(cardLen, cardLen * 1.25, droop, 3);
   const start = h * (1 - crown);
   const whorls = Math.round(cards / 7);
   for (let w = 0; w < whorls; w++) {
@@ -174,6 +174,17 @@ function buildConifer(rnd, { h = 16, cards = 200, crown = 0.78, radius = 3.4, dr
       const yaw = (i / n) * Math.PI * 2 + w * 2.39 + rnd() * 0.5;
       const s = (rr / cardLen) * (0.85 + rnd() * 0.35);
       parts.push(placeCard(base, null, new THREE.Vector3(Math.sin(yaw) * 0.15, y + rnd() * 0.3, Math.cos(yaw) * 0.15), yaw, -0.25 + rnd() * 0.3 + t * -0.4, (rnd() - 0.5) * 0.6, Math.max(s, 0.25)));
+    }
+  }
+  // inner fill layer (hides the trunk, adds volume)
+  const inner = cardGeo(cardLen * 0.7, cardLen * 0.9, droop * 0.6, 2);
+  for (let w = 0; w < whorls * 0.8; w++) {
+    const t = w / (whorls * 0.8);
+    const y = start + (h - start) * t;
+    const rr = radius * 0.55 * Math.pow(1 - t, 1.1) + 0.15;
+    for (let i = 0; i < 4; i++) {
+      const yaw = (i / 4) * Math.PI * 2 + w * 1.7 + rnd();
+      parts.push(placeCard(inner, null, new THREE.Vector3(0, y, 0), yaw, -0.1 + rnd() * 0.4, (rnd() - 0.5) * 0.8, Math.max(rr / (cardLen * 0.7), 0.3)));
     }
   }
   // top tuft

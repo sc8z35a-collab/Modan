@@ -58,7 +58,9 @@ export function bakeWorldData(res = 512) {
       const [g, f, r, s] = coverageAt(x, z, h, slope);
       const k = (j * res + i) * 4;
       data[k] = h;
-      data[k + 1] = clamp(g + f * 0.25, 0, 1) * smoothstep(0.25, 0.9, h); // grass density
+      const C = WORLD.camp, cd = Math.hypot(x - C.x, z - C.z);
+      const worn = Math.max(smoothstep(9, 3, cd), pathMask(x, z));
+      data[k + 1] = clamp(g + f * 0.25, 0, 1) * smoothstep(0.25, 0.9, h) * (1 - worn * 0.85); // grass density
       data[k + 2] = f;     // forest-floor amount
       data[k + 3] = s;     // sand
     }

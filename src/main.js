@@ -153,7 +153,15 @@ class Game {
     put(table, C.x + 4.2, C.z + 4.2, -0.5);
     this.world.colliders.add(C.x + 4.2, C.z + 4.2, 0.6, 'table');
     // string lights between tent and a pole
-    this.buildStringLights(new THREE.Vector3(tx0 + 0.6, heightAt(tx0, tz0) + 2.1, tz0 - 1.2), new THREE.Vector3(C.x + 4.6, heightAt(C.x + 4.6, C.z + 5.2) + 2.3, C.z + 5.4));
+    // wooden poles for the string lights
+    const poleMat = new THREE.MeshStandardMaterial({ map: tx.bark_brown_02.diff, normalMap: tx.bark_brown_02.nor, roughness: 1 });
+    const poleA = [tx0 + 0.9, tz0 - 1.9], poleB = [C.x + 4.9, C.z + 5.6];
+    for (const [px, pz] of [poleA, poleB]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 2.5, 10), poleMat);
+      pole.position.set(px, heightAt(px, pz) + 1.25, pz); pole.castShadow = true; this.scene.add(pole);
+      this.world.colliders.add(px, pz, 0.12, 'pole');
+    }
+    this.buildStringLights(new THREE.Vector3(poleA[0], heightAt(...poleA) + 2.4, poleA[1]), new THREE.Vector3(poleB[0], heightAt(...poleB) + 2.4, poleB[1]));
 
     // dock at end of path
     const [ex, ez] = PATH_PTS[PATH_PTS.length - 1];
@@ -198,7 +206,7 @@ class Game {
     const wire = new THREE.Mesh(new THREE.TubeGeometry(curve, 60, 0.004, 4), new THREE.MeshStandardMaterial({ color: 0x111111 }));
     this.scene.add(wire);
     this.bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0) });
-    const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.03, 8, 6), this.bulbMat, n - 1);
+    const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.02, 8, 6), this.bulbMat, n - 1);
     const m = new THREE.Matrix4();
     for (let i = 1; i < n; i++) { const p = curve.getPoint(i / n); m.makeTranslation(p.x, p.y - 0.04, p.z); bulbs.setMatrixAt(i - 1, m); }
     this.scene.add(bulbs);
@@ -382,7 +390,7 @@ class Game {
       l.userData.flame.visible = lampOn > 0.05;
     }
     this.stringLight.intensity = lampOn * 3;
-    this.bulbMat.color.setRGB(3 * lampOn, 2 * lampOn, 0.9 * lampOn);
+    this.bulbMat.color.setRGB(2.2 * lampOn, 1.45 * lampOn, 0.6 * lampOn);
     this.tent.userData.light.intensity = lampOn * 1.2;
     this.world.U.uTentGlow.value = lampOn * 0.5;
     // boat bob
