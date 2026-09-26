@@ -4,3 +4,4 @@ dist/
 *.log
 .env
 .agents/shots/
+assets-src/models/*/textures

@@ -22,8 +22,11 @@ await MeshoptSimplifier.ready;
 const io = new NodeIO();
 for (const [id, ratio] of Object.entries(TARGETS)) {
   const dir = path.resolve('public/assets/models', id);
-  const src = path.join(dir, `${id}_1k.gltf`);
+  const src = path.resolve('assets-src/models', id, `${id}_1k.gltf`);
   if (!fs.existsSync(src)) { console.warn('missing', src); continue; }
+  // textures live next to the runtime model (public/); link them so the reader can resolve URIs
+  const texLink = path.resolve('assets-src/models', id, 'textures');
+  if (!fs.existsSync(texLink)) fs.symlinkSync(path.join(dir, 'textures'), texLink);
   const doc = await io.read(src);
   const count = () => doc.getRoot().listMeshes().reduce((s, m) => s + m.listPrimitives().reduce((a, p) => a + (p.getIndices()?.getCount() || 0) / 3, 0), 0);
   const before = count();

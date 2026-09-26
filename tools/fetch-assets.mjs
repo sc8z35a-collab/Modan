@@ -57,9 +57,10 @@ async function fetchTexture(id, res) {
 async function fetchModel(id, res) {
   const files = await (await fetch(`${API}/files/${id}`)).json();
   const g = files.gltf[res].gltf;
-  const dir = path.join(OUT, 'models', id);
-  await dl(g.url, path.join(dir, path.basename(g.url)));
-  for (const [rel, v] of Object.entries(g.include || {})) await dl(v.url, path.join(dir, rel));
+  // source gltf/bin go to assets-src (decimated by tools/optimize-models.mjs); textures ship in public
+  const dir = path.join(OUT, 'models', id), src = path.resolve('assets-src/models', id);
+  await dl(g.url, path.join(src, path.basename(g.url)));
+  for (const [rel, v] of Object.entries(g.include || {})) await dl(v.url, path.join(rel.endsWith('.bin') ? src : dir, rel));
   console.log('[model]', id);
 }
 
