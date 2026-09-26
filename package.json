@@ -8,7 +8,11 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "agents": "node tools/agents/orchestrator.mjs",
-    "assets": "node tools/fetch-assets.mjs"
+    "assets": "node tools/fetch-assets.mjs",
+    "agents:watch": "node tools/agents/orchestrator.mjs --watch --skip-build",
+    "agents:fast": "node tools/agents/orchestrator.mjs --skip-build",
+    "qa": "node tools/qa-server.mjs",
+    "autosave": "tools/autosave.sh 120"
   },
   "repository": {
     "type": "git",

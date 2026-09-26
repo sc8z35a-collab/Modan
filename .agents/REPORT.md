@@ -1,10 +1,11 @@
 # Agent pipeline report
 
-- time: 2026-09-26T09:53:36.961Z
+- time: 2026-09-26T11:18:49.563Z
 - LLM API: **unavailable** (free_plan_block)
-- result: **ALL PASS** in 5200ms
+- agents: 6 in parallel
+- result: **ALL PASS** in 5151ms
 
-## ✅ asset-agent (57ms)
+## ✅ asset-agent (100ms)
 ```json
 {
  "boulder_01": 1965,
@@ -19,65 +20,85 @@
 }
 ```
 
-## ✅ build-agent (4873ms)
+## ✅ build-agent (4797ms)
 ```json
 {
  "bundleKB": 1040,
- "buildMs": 4872
+ "buildMs": 4797,
+ "lintedFiles": 21
 }
 ```
+- review: local (LLM free_plan_block)
 
-## ✅ shader-agent (35ms)
+## ✅ shader-agent (74ms)
 ```json
 {
  "files": 8
 }
 ```
-- review mode: local (LLM free_plan_block)
+- review: local (LLM free_plan_block)
 
-## ✅ perf-agent (11ms)
+## ✅ perf-agent (48ms)
 ```json
 {
  "ultra": "pixelRatio: 2.0, shadow: 4096, ao: true, aoHalf: false, grass: 1.0, trees: 1.0, water: 0.6, bloom: true, smaa: true",
  "grassBlades": 400000,
  "treeAttempts": 26000,
- "snap_camp2": {
-  "tris": 4978212,
-  "calls": 2204
- },
- "snap_forest": {
-  "tris": 3098016,
-  "calls": 1331
- },
- "snap_forest2": {
-  "tris": 3178074,
-  "calls": 1330
+ "pointLights": 6,
+ "snap_camp": {
+  "tris": 4976436,
+  "calls": 2238
  },
  "snap_lake": {
-  "tris": 4634059,
-  "calls": 2096
+  "tris": 4896662,
+  "calls": 2146
  },
  "snap_night": {
-  "tris": 4711311,
-  "calls": 2070
+  "tris": 4841485,
+  "calls": 2119
+ },
+ "snap_pcamp": {
+  "tris": 5015032,
+  "calls": 2217
  }
 }
 ```
-- review mode: local (LLM free_plan_block)
+- review: local (LLM free_plan_block)
 
-## ✅ mobile-agent (10ms)
-- review mode: local (LLM free_plan_block)
+## ✅ mobile-agent (13ms)
+- review: local (LLM free_plan_block)
 
-## ✅ review-agent (9ms)
+## ✅ visual-agent (367ms)
 ```json
 {
- "changed": [
-  "src/fx/fire.js",
-  "src/main.js",
-  "src/world/terrain.js",
-  "src/world/trees.js",
-  "src/world/world.js"
- ]
+ "camp.png": {
+  "mean": 91.2,
+  "contrast": 41.8,
+  "clipHi": 0.02,
+  "clipLo": 0.12,
+  "sat": 0.373
+ },
+ "lake.png": {
+  "mean": 99.7,
+  "contrast": 41.6,
+  "clipHi": 0,
+  "clipLo": 0.09,
+  "sat": 0.254
+ },
+ "night.png": {
+  "mean": 24.8,
+  "contrast": 30.5,
+  "clipHi": 0.04,
+  "clipLo": 28.63,
+  "sat": 0.682
+ },
+ "pcamp.png": {
+  "mean": 92.6,
+  "contrast": 38.5,
+  "clipHi": 0.05,
+  "clipLo": 0.1,
+  "sat": 0.415
+ }
 }
 ```
-- review mode: local (LLM free_plan_block)
+- review: local (LLM free_plan_block)
