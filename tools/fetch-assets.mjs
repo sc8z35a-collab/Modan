@@ -11,7 +11,6 @@ export const TEXTURES = [
   ['forest_ground_04', '2k'],
   ['aerial_grass_rock', '2k'],
   ['brown_planks_05', '1k'],
-  ['forrest_ground_01', '2k'],
   ['rocky_terrain_02', '2k'],
   ['pine_bark', '1k'],
   ['bark_brown_02', '1k'],

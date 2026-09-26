@@ -7,7 +7,7 @@ import { Scatter, Colliders } from './scatter.js';
 import { createTreeKinds, windify } from './trees.js';
 import { mulberry32, smoothstep } from '../core/noise.js';
 
-const TEX_IDS = ['aerial_grass_rock', 'forest_ground_04', 'forrest_ground_01', 'rocky_terrain_02', 'coast_sand_rocks_02', 'pine_bark', 'bark_brown_02', 'brown_planks_05'];
+const TEX_IDS = ['aerial_grass_rock', 'forest_ground_04', 'rocky_terrain_02', 'coast_sand_rocks_02', 'pine_bark', 'bark_brown_02', 'brown_planks_05'];
 const MODEL_IDS = ['boulder_01', 'rock_moss_set_01', 'tree_stump_01', 'dead_tree_trunk', 'fern_02', 'shrub_01', 'dry_branches_medium_01', 'namaqualand_stones_01'];
 
 export async function loadAssets(renderer, onProgress, texMax = 0) {
