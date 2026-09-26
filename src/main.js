@@ -102,6 +102,7 @@ class Game {
       if (sh.extra.includes('rain')) this.rain = 1;
       this.state.timeScale = 0; this.sky.envTimer = 99; this.snapping = true; this.snapPlayer = !sh.extra.includes('title');
       const nf = +(params.get('snapf') || 2); for (let k = 0; k < nf; k++) { this.frame(1 / 30); console.log('[snap] frame', k, performance.now() | 0); await new Promise((r) => setTimeout(r, 0)); }
+      const cp = this.camera.position; console.log('[snap] cam', cp.x.toFixed(1), cp.y.toFixed(1), cp.z.toFixed(1), this.snapPlayer);
       const png = this.R.r.domElement.toDataURL('image/jpeg', 0.85);
       const i = this.R.r.info;
       await fetch('/__snap', { method: 'POST', body: JSON.stringify({ name: sh.name, png, info: { fps: $('fps').textContent, tris: i.render.triangles, calls: i.render.calls, trees: this.world.treeCount, ua: navigator.userAgent, gpu: this.gpuName() } }) }).catch(() => {});
