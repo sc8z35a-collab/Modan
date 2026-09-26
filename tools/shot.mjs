@@ -19,7 +19,8 @@ const ctx = await browser.newContext({
 });
 const page = await ctx.newPage();
 const logs = [];
-page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
+page.on('console', (m) => { logs.push(`[${m.type()}] ${m.text()}`); if (process.env.V) console.log('>', m.text().slice(0, 200)); });
+page.on('crash', () => console.log('CRASH'));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
 const q = args.q || 'qa';
 await page.goto(`${url}?q=${q}&autostart=1&fps=1`, { waitUntil: 'load', timeout: 120000 });

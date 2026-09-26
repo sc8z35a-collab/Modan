@@ -23,7 +23,7 @@ const params = new URLSearchParams(location.search);
 
 class Game {
   async init() {
-    const setLoad = (p, txt) => { $('loadbar').style.width = Math.round(p * 100) + '%'; if (txt) $('loadtxt').textContent = txt; };
+    const setLoad = (p, txt) => { if (params.has('autostart')) console.log('[load]', p.toFixed(2), txt || '', performance.memory ? (performance.memory.usedJSHeapSize/1e6).toFixed(0)+'MB' : ''); $('loadbar').style.width = Math.round(p * 100) + '%'; if (txt) $('loadtxt').textContent = txt; };
     const savedQ = localStorage.getItem('modan-quality') || params.get('q') || 'ultra';
     $('optQuality').value = savedQ;
     this.R = new Renderer($('gl'), savedQ);
