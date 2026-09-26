@@ -100,7 +100,7 @@ class Game {
       if (sh.pos) { const [x, z, yaw, pitch] = sh.pos; this.player.pos.set(x, 0, z); this.player.yaw = yaw; this.player.pitch = pitch || 0; }
       if (sh.extra.includes('fire')) { this.fire.addFuel(1); this.fire.ignite(); this.fire.intensity = 1; this.fireLogs.visible = true; }
       if (sh.extra.includes('rain')) this.rain = 1;
-      this.state.timeScale = 0; this.sky.envTimer = 99; this.snapping = true;
+      this.state.timeScale = 0; this.sky.envTimer = 99; this.snapping = true; this.snapPlayer = !sh.extra.includes('title');
       const nf = +(params.get('snapf') || 2); for (let k = 0; k < nf; k++) { this.frame(1 / 30); console.log('[snap] frame', k, performance.now() | 0); await new Promise((r) => setTimeout(r, 0)); }
       const png = this.R.r.domElement.toDataURL('image/jpeg', 0.85);
       const i = this.R.r.info;
@@ -342,7 +342,7 @@ class Game {
     this.scene.fog.density += mist * 0.012 + this.rain * 0.004;
 
     // player & camera
-    if (this.started && !this.photo) this.player.update(dt, this.input);
+    if ((this.started || this.snapPlayer) && !this.photo) this.player.update(dt, this.input);
     else if (!this.started) {
       // cinematic title camera orbiting the camp
       this.titleCam += dt * 0.03;
