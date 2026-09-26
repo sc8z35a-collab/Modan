@@ -14,7 +14,7 @@ const browser = await chromium.launch({
 });
 // Pixel-class Android in landscape
 const ctx = await browser.newContext({
-  viewport: { width: 915, height: 412 }, deviceScaleFactor: args.dpr ? +args.dpr : 1, isMobile: true, hasTouch: true,
+  viewport: { width: +(args.w || 915), height: +(args.h || 412) }, deviceScaleFactor: args.dpr ? +args.dpr : 1, isMobile: true, hasTouch: true,
   userAgent: 'Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36',
 });
 const page = await ctx.newPage();
