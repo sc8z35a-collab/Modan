@@ -1,0 +1,32 @@
+{
+  "name": "modan-camp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "agents": "node tools/agents/orchestrator.mjs",
+    "assets": "node tools/fetch-assets.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sc8z35a-collab/Modan.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sc8z35a-collab/Modan/issues"
+  },
+  "homepage": "https://github.com/sc8z35a-collab/Modan#readme",
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0",
+    "vite": "^6.4.3"
+  },
+  "type": "module"
+}
