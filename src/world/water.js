@@ -52,8 +52,8 @@ export class Water {
       uTexMatrix: { value: new THREE.Matrix4() },
       uSunDir: { value: new THREE.Vector3(0, 1, 0) },
       uSunCol: { value: new THREE.Color(1, 1, 1) },
-      uShallow: { value: new THREE.Color(0.18, 0.32, 0.26) },
-      uDeep: { value: new THREE.Color(0.02, 0.07, 0.08) },
+      uShallow: { value: new THREE.Color(0.11, 0.15, 0.09) },
+      uDeep: { value: new THREE.Color(0.008, 0.026, 0.03) },
       uFogCol: { value: new THREE.Color() }, uFogDensity: { value: 0.003 },
       uNight: { value: 0 },
       uWorld: { value: worldData.tex }, uWorldRes: { value: worldData.res }, uWorldSize: { value: worldData.size },
@@ -104,11 +104,14 @@ export class Water {
           vec2 ruv = vRUV.xy / vRUV.w + n.xz * 0.045;
           vec3 refl = texture2D(tReflect, ruv).rgb;
           // absorption
-          float a = 1.0 - exp(-depth * 0.55);
+          float a = 1.0 - exp(-depth * 0.8);
           vec3 body = mix(uShallow, uDeep, a) * (1.0 - uNight*0.9);
           // subsurface-ish scatter
-          body += vec3(0.02,0.06,0.05) * max(uSunDir.y,0.0) * (1.0 - a);
-          vec3 col = mix(body, refl, clamp(fres*1.1, 0.0, 1.0));
+          body += vec3(0.03,0.045,0.02) * max(uSunDir.y,0.0) * (1.0 - a);
+          // pebbly lakebed visible through clear shallows
+          body *= mix(0.75, 1.15, texture2D(tNormal, p*0.9 + n.xz*0.05).g) * (1.0 - a) + a;
+          // reflections of a forest shore are slightly darker than the sky they mirror
+          vec3 col = mix(body, refl * 0.92, clamp(fres * 1.15 + 0.04, 0.0, 1.0));
           // sun specular
           vec3 H = normalize(uSunDir + V);
           float spec = pow(max(dot(n, H), 0.0), 720.0) * 60.0 + pow(max(dot(n, H), 0.0), 90.0) * 0.6;

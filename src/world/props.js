@@ -13,85 +13,178 @@ function canvasTex(w, h, draw, srgb = true) {
   return t;
 }
 
-// ripstop nylon fabric
-function fabricTextures(base = '#c2572b') {
-  const map = canvasTex(512, 512, (g, w, h) => {
+// ripstop nylon fabric: grid weave, panel seams, grime toward the ground (v=0 at ground)
+function fabricTextures(base = '#c2572b', seam = 'rgba(0,0,0,0.22)') {
+  const map = canvasTex(1024, 1024, (g, w, h) => {
     g.fillStyle = base; g.fillRect(0, 0, w, h);
-    g.globalAlpha = 0.08; g.strokeStyle = '#000';
-    for (let i = 0; i < w; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(w, i); g.stroke(); }
-    g.globalAlpha = 0.05;
-    for (let i = 0; i < 4000; i++) { g.fillStyle = Math.random() > 0.5 ? '#fff' : '#000'; g.fillRect(Math.random() * w, Math.random() * h, 1, 1); }
-    // dirt at the bottom
-    const grd = g.createLinearGradient(0, h, 0, h * 0.7);
-    grd.addColorStop(0, 'rgba(60,40,20,0.35)'); grd.addColorStop(1, 'rgba(60,40,20,0)');
-    g.globalAlpha = 1; g.fillStyle = grd; g.fillRect(0, 0, w, h);
+    // subtle large-scale dye variation
+    for (let i = 0; i < 60; i++) {
+      const x = Math.random() * w, y = Math.random() * h, r = 60 + Math.random() * 160;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      const c = Math.random() > 0.5 ? '255,255,255' : '0,0,0';
+      gr.addColorStop(0, `rgba(${c},0.035)`); gr.addColorStop(1, `rgba(${c},0)`);
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    }
+    // ripstop grid
+    g.globalAlpha = 0.09; g.strokeStyle = '#000'; g.lineWidth = 1.5;
+    for (let i = 0; i < w; i += 20) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(w, i); g.stroke(); }
+    g.globalAlpha = 0.05; g.strokeStyle = '#fff'; g.lineWidth = 1;
+    for (let i = 2; i < w; i += 20) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(w, i); g.stroke(); }
+    // stitched seams every 256px
+    g.globalAlpha = 1; g.strokeStyle = seam; g.lineWidth = 5;
+    for (let i = 0; i < w; i += 256) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke(); }
+    g.setLineDash([6, 5]); g.lineWidth = 1.5; g.strokeStyle = 'rgba(255,255,255,0.18)';
+    for (let i = 0; i < w; i += 256) for (const o of [-5, 5]) { g.beginPath(); g.moveTo(i + o, 0); g.lineTo(i + o, h); g.stroke(); }
+    g.setLineDash([]);
+    g.globalAlpha = 0.04;
+    for (let i = 0; i < 9000; i++) { g.fillStyle = Math.random() > 0.5 ? '#fff' : '#000'; g.fillRect(Math.random() * w, Math.random() * h, 1.5, 1.5); }
+    // mud / grime near the ground (bottom of texture = v 0)
+    g.globalAlpha = 1;
+    const grd = g.createLinearGradient(0, h, 0, h * 0.72);
+    grd.addColorStop(0, 'rgba(58,40,22,0.55)'); grd.addColorStop(0.35, 'rgba(58,40,22,0.18)'); grd.addColorStop(1, 'rgba(58,40,22,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(50,34,18,${Math.random() * 0.25})`; const x = Math.random() * w, y = h - Math.pow(Math.random(), 2.5) * h * 0.25; g.beginPath(); g.arc(x, y, 1 + Math.random() * 5, 0, 7); g.fill(); }
   });
-  const nrm = canvasTex(256, 256, (g, w, h) => {
+  const nrm = canvasTex(512, 512, (g, w, h) => {
     g.fillStyle = 'rgb(128,128,255)'; g.fillRect(0, 0, w, h);
-    for (let i = 0; i < w; i += 8) { g.fillStyle = 'rgb(150,128,255)'; g.fillRect(i, 0, 1, h); g.fillStyle = 'rgb(128,150,255)'; g.fillRect(0, i, w, 1); }
+    for (let i = 0; i < w; i += 10) { g.fillStyle = 'rgb(152,128,255)'; g.fillRect(i, 0, 1, h); g.fillStyle = 'rgb(104,128,255)'; g.fillRect(i + 1, 0, 1, h); g.fillStyle = 'rgb(128,152,255)'; g.fillRect(0, i, w, 1); g.fillStyle = 'rgb(128,104,255)'; g.fillRect(0, i + 1, w, 1); }
+    // seam ridges
+    for (let i = 0; i < w; i += 128) { g.fillStyle = 'rgb(90,128,255)'; g.fillRect(i - 3, 0, 3, h); g.fillStyle = 'rgb(166,128,255)'; g.fillRect(i, 0, 3, h); }
   }, false);
   return { map, nrm };
 }
 
-export function buildTent(U) {
-  const { map, nrm } = fabricTextures('#c8612f');
-  const fly = fabricTextures('#2f5d4a');
-  const mat = new THREE.MeshStandardMaterial({ map, normalMap: nrm, normalScale: new THREE.Vector2(0.4, 0.4), roughness: 0.72, side: THREE.DoubleSide });
-  const flyMat = new THREE.MeshStandardMaterial({ map: fly.map, normalMap: fly.nrm, normalScale: new THREE.Vector2(0.4, 0.4), roughness: 0.6, side: THREE.DoubleSide });
-  // translucent glow when lantern is inside
+// Dome tent surface: rounded-square footprint, fabric sags between the two diagonal poles.
+// a = azimuth (atan2(z,x)), e = elevation 0 (ground) .. PI/2 (apex).
+const TENT = { Rx: 1.18, Rz: 1.06, H: 1.22 };
+function domePoint(a, e, s = 1, out = new THREE.Vector3()) {
+  const ca = Math.cos(a), sa = Math.sin(a);
+  // superellipse footprint (squarish)
+  const n = 3.2, k = Math.pow(Math.pow(Math.abs(ca), n) + Math.pow(Math.abs(sa), n), -1 / n);
+  const sag = Math.pow(Math.cos(2 * a), 2); // 0 on poles (diagonals), 1 mid-panel
+  const ce = Math.cos(e), se = Math.sin(e);
+  const r = k * Math.pow(ce, 0.82) * (1 - 0.075 * sag * Math.sin(e * 2) - 0.03 * sag * se) * s;
+  const y = TENT.H * Math.pow(se, 0.92) * (1 - 0.05 * sag * ce) * s;
+  return out.set(ca * r * TENT.Rx, y, sa * r * TENT.Rz);
+}
+function domeGeometry(s, e0, e1, a0 = 0, a1 = Math.PI * 2, as = 96, es = 28) {
+  const pos = [], uv = [], idx = [], v = new THREE.Vector3();
+  for (let j = 0; j <= es; j++) for (let i = 0; i <= as; i++) {
+    const a = a0 + (a1 - a0) * (i / as), e = e0 + (e1 - e0) * (j / es);
+    domePoint(a, e, s, v); pos.push(v.x, v.y, v.z);
+    uv.push((a / (Math.PI * 2)) * 4, e / (Math.PI / 2));
+  }
+  for (let j = 0; j < es; j++) for (let i = 0; i < as; i++) {
+    const A = j * (as + 1) + i, B = A + 1, C = A + as + 1, D = C + 1;
+    idx.push(A, C, B, B, C, D);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+
+function tentMaterial(U, colorHex, glowMul, flutter, seam) {
+  const { map, nrm } = fabricTextures(colorHex, seam);
+  const mat = new THREE.MeshPhysicalMaterial({ map, normalMap: nrm, normalScale: new THREE.Vector2(0.35, 0.35), roughness: 0.62, sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color(colorHex).lerp(new THREE.Color('#ffffff'), 0.4), side: THREE.DoubleSide });
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = U.uTime; sh.uniforms.uGlow = U.uTentGlow;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        float wv = sin(uTime*3.0 + position.x*2.0 + position.z*1.5) * 0.012 * smoothstep(0.1, 1.2, position.y) * (1.0 - smoothstep(1.1,1.35,position.y));
-        transformed += normal * wv;`);
+        float fl = sin(uTime*2.3 + position.x*3.1 + position.z*2.3) * 0.6 + sin(uTime*5.7 + position.y*6.0 + position.x) * 0.4;
+        transformed += normal * fl * ${flutter.toFixed(4)} * smoothstep(0.05, 0.7, position.y);`);
+    // lantern inside: light transmits through the fabric (both faces)
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uGlow;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0,0.7,0.35) * uGlow * 1.6;`);
+        totalEmissiveRadiance += mix(diffuseColor.rgb, vec3(0.9,0.75,0.5), 0.5) * vec3(1.0,0.66,0.32) * uGlow * ${glowMul.toFixed(2)};`);
   };
+  return mat;
+}
+
+export function buildTent(U) {
   const g = new THREE.Group();
-  // dome tent: two crossing arcs -> build shell from a squashed hemisphere
-  const shell = new THREE.SphereGeometry(1.35, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2);
-  shell.scale(1.25, 0.95, 1.05);
-  const p = shell.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    // pinch along pole lines to create panels
-    const a = Math.atan2(z, x);
-    const pinch = 1 - 0.05 * Math.pow(Math.abs(Math.cos(a * 2)), 8) * (y / 1.3);
-    p.setXYZ(i, x * pinch, y, z * pinch);
+  const innerMat = tentMaterial(U, '#d9c49a', 1.5, 0.004, 'rgba(90,60,20,0.25)');
+  const flyMat = tentMaterial(U, '#476a3c', 0.55, 0.01, 'rgba(0,0,0,0.3)');
+  const tubMat = new THREE.MeshStandardMaterial({ color: 0x2a2f33, roughness: 0.55, metalness: 0.0 });
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0xb8bcc2, metalness: 1.0, roughness: 0.28 });
+  const cordMat = new THREE.MeshStandardMaterial({ color: 0xf05a28, roughness: 0.6, emissive: 0x200800 });
+  const add = (geo, mat, cast = true) => { const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = true; g.add(m); return m; };
+
+  // bathtub floor (dark PU-coated rim, 12cm high)
+  add(domeGeometry(1.0, 0, 0.1, 0, Math.PI * 2, 96, 3), tubMat);
+  // inner tent body
+  add(domeGeometry(0.995, 0.1, Math.PI / 2, 0, Math.PI * 2, 96, 30), innerMat);
+  // inner door: D-shaped dark mesh panel on the front (+z) face, zipper half-open
+  const door = add(domeGeometry(1.003, 0.1, 0.95, Math.PI / 2 - 0.5, Math.PI / 2 + 0.5, 24, 14), new THREE.MeshStandardMaterial({ color: 0x0d0b08, roughness: 0.95, transparent: true, opacity: 0.92, side: THREE.DoubleSide }), false);
+  door.userData.door = true;
+  // rainfly: sits 6cm off the inner, stops 16cm above ground so the tub shows
+  add(domeGeometry(1.055, 0.16, Math.PI / 2, 0, Math.PI * 2, 96, 26), flyMat);
+
+  // vestibule on the front: Coons-like surface between the fly's front arc and a ground curve to a stake
+  const v = new THREE.Vector3(), w = new THREE.Vector3();
+  const footL = domePoint(3 * Math.PI / 4, 0.16, 1.055), footR = domePoint(Math.PI / 4, 0.16, 1.055);
+  const stake = new THREE.Vector3(0, 0.03, 2.05);
+  const topArc = (u, out) => domePoint(3 * Math.PI / 4 + (Math.PI / 4 - 3 * Math.PI / 4) * u, 0.16 + Math.sin(Math.PI * u) * 0.95, 1.06, out);
+  const ground = (u, out) => { const t = u; const a = footL.clone().lerp(stake, t * 2).setY(0.16 * (1 - Math.sin(Math.PI * u)) + 0.03); const b = stake.clone().lerp(footR, t * 2 - 1).setY(0.16 * (1 - Math.sin(Math.PI * u)) + 0.03); return out.copy(u < 0.5 ? a : b); };
+  const vestibule = (u0, u1, US) => {
+    const VS = 16, pos = [], uv = [], idx = [];
+    for (let j = 0; j <= VS; j++) for (let i = 0; i <= US; i++) {
+      const u = u0 + (u1 - u0) * (i / US), t = j / VS;
+      topArc(u, v); ground(u, w);
+      const p = v.clone().lerp(w, t);
+      p.y -= Math.sin(Math.PI * t) * 0.06 * Math.sin(Math.PI * u); // fabric sag
+      pos.push(p.x, p.y, p.z); uv.push(u * 2, 1 - t * 0.8);
+    }
+    for (let j = 0; j < VS; j++) for (let i = 0; i < US; i++) { const A = j * (US + 1) + i, B = A + 1, C = A + US + 1, D = C + 1; idx.push(A, C, B, B, C, D); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx); geo.computeVertexNormals(); return geo;
+  };
+  // left vestibule panel closed, right panel rolled up (door open)
+  add(vestibule(0, 0.5, 24), flyMat);
+  const rollPts = []; for (let i = 0; i <= 16; i++) { topArc(0.5 + 0.5 * (i / 16), v); rollPts.push(v.clone().add(new THREE.Vector3(0, 0.02, 0.05))); }
+  add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rollPts), 32, 0.045, 10), flyMat);
+  // zipper line on closed panel edge
+  const zipPts = []; for (let i = 0; i <= 12; i++) { const t = i / 12; topArc(0.5, v); ground(0.5, w); zipPts.push(v.clone().lerp(w, t).add(new THREE.Vector3(0, 0, 0.01))); }
+  add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(zipPts), 16, 0.008, 5), tubMat, false);
+  // toggles holding the rolled door
+  for (const u of [0.62, 0.86]) { topArc(u, v); add(new THREE.TorusGeometry(0.05, 0.008, 6, 14), cordMat, false).position.copy(v).add(new THREE.Vector3(0, 0, 0.05)); }
+
+  // poles: two crossing arcs along the diagonals (visible below the fly and at the feet), plus brow pole
+  const poleCurve = (a) => { const pts = []; for (let i = 0; i <= 30; i++) { const e = (i / 30) * Math.PI; pts.push(e <= Math.PI / 2 ? domePoint(a, e, 1.03) : domePoint(a + Math.PI, Math.PI - e, 1.03)); } return new THREE.CatmullRomCurve3(pts); };
+  for (const a of [Math.PI / 4, 3 * Math.PI / 4]) add(new THREE.TubeGeometry(poleCurve(a), 80, 0.0095, 8), poleMat);
+  // pole feet: grommets + tips
+  for (const a of [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4]) {
+    domePoint(a, 0, 1.03, v);
+    const tip = add(new THREE.CylinderGeometry(0.014, 0.012, 0.06, 10), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.6 }));
+    tip.position.copy(v).setY(0.03);
+    const web = add(new THREE.BoxGeometry(0.03, 0.12, 0.004), tubMat, false); web.position.copy(v).setY(0.06); web.lookAt(0, 0.06, 0);
   }
-  shell.computeVertexNormals();
-  const body = new THREE.Mesh(shell, mat);
-  body.castShadow = body.receiveShadow = true;
-  g.add(body);
-  // rainfly on top
-  const flyG = new THREE.SphereGeometry(1.42, 48, 16, 0, Math.PI * 2, 0, Math.PI / 3.1);
-  flyG.scale(1.25, 0.95, 1.05);
-  const flyM = new THREE.Mesh(flyG, flyMat); flyM.castShadow = true; flyM.position.y = 0.02; g.add(flyM);
-  // door (dark zipped opening)
-  const door = new THREE.Mesh(new THREE.CircleGeometry(0.62, 32, 0, Math.PI), new THREE.MeshStandardMaterial({ color: 0x1a0f08, roughness: 1 }));
-  door.position.set(0, 0.01, 1.14); door.scale.set(1, 1.35, 1); g.add(door);
-  // poles
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.9, roughness: 0.3 });
-  for (const rot of [Math.PI / 4, -Math.PI / 4]) {
-    const curve = new THREE.EllipseCurve(0, 0, 1.72, 1.3, 0, Math.PI);
-    const pts = curve.getPoints(40).map((v) => new THREE.Vector3(v.x, v.y, 0));
-    const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.012, 6), poleMat);
-    tube.rotation.y = rot; g.add(tube);
+
+  // guy lines (reflective orange cord) + aluminium Y-stakes with tensioners
+  const stakeGeo = new THREE.CylinderGeometry(0.008, 0.003, 0.22, 6); stakeGeo.translate(0, -0.04, 0);
+  const stakeHead = new THREE.TorusGeometry(0.016, 0.004, 5, 10, Math.PI);
+  const guy = (from, to) => {
+    const mid = from.clone().lerp(to, 0.5); mid.y -= from.distanceTo(to) * 0.012;
+    add(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(from, mid, to), 10, 0.0028, 4), cordMat, false);
+    const st = add(stakeGeo, poleMat, false); st.position.copy(to); st.rotation.set(0.35 * Math.sign(to.z || 1), 0, -0.35 * Math.sign(to.x || 1));
+    const hd = add(stakeHead, poleMat, false); hd.position.copy(to).setY(to.y + 0.07);
+    const tn = add(new THREE.BoxGeometry(0.03, 0.012, 0.008), cordMat, false); tn.position.copy(from.clone().lerp(to, 0.82));
+  };
+  for (const a of [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4]) {
+    const from = domePoint(a, 0.62, 1.06);
+    const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+    guy(from, dir.multiplyScalar(2.35).setY(0.03).add(new THREE.Vector3(0, 0, 0)));
   }
-  // guy lines + stakes
-  const lineMat = new THREE.LineBasicMaterial({ color: 0xdddddd });
-  for (let i = 0; i < 4; i++) {
-    const a = i * Math.PI / 2 + Math.PI / 4;
-    const from = new THREE.Vector3(Math.cos(a) * 1.2, 0.9, Math.sin(a) * 1.0);
-    const to = new THREE.Vector3(Math.cos(a) * 2.6, 0, Math.sin(a) * 2.3);
-    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([from, to]), lineMat));
-    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.005, 0.2), poleMat); st.position.copy(to); g.add(st);
-  }
-  // inner light
+  guy(domePoint(-Math.PI / 2, 0.7, 1.06), new THREE.Vector3(0, 0.03, -2.3));
+  guy(topArc(0.5, new THREE.Vector3()).clone(), new THREE.Vector3(0, 0.03, 2.75));
+  // vestibule stake
+  const vs = add(stakeGeo, poleMat, false); vs.position.copy(stake);
+
+  // inner lantern light
   const light = new THREE.PointLight(0xffb060, 0, 5, 2);
-  light.position.set(0, 0.6, 0);
+  light.position.set(0, 0.55, 0);
   g.add(light);
   g.userData.light = light;
   return g;

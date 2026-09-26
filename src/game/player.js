@@ -33,8 +33,8 @@ export class Player {
     this.inWater = water;
     let speed = (mv.run && !crouch ? 5.6 : 2.6) * (crouch ? 0.55 : 1) * this.speedMul;
     speed *= 1 / (1 + water * 1.8);
-    const f = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const r = new THREE.Vector3(-f.z, 0, f.x);
+    const f = (this._f || (this._f = new THREE.Vector3())).set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    const r = (this._r || (this._r = new THREE.Vector3())).set(-f.z, 0, f.x);
     const want = f.multiplyScalar(mv.y).add(r.multiplyScalar(mv.x)).multiplyScalar(speed);
     const acc = want.lengthSq() > 0 ? 10 : 12;
     this.vel.x = lerp(this.vel.x, want.x, Math.min(1, acc * dt));

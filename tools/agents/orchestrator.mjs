@@ -99,7 +99,11 @@ const agents = {
       const logs = s.split('\n').filter((l) => /console\.log\(/.test(l) && !/\[(load|snap)\]/.test(l));
       if (logs.length) issues.push(`${f}: ${logs.length} stray console.log`);
       for (const m of s.matchAll(/\/\/\s*(TODO|FIXME|HACK)[: ](.*)/g)) findings.push({ severity: 'low', file: f, title: m[1], detail: m[2].trim() });
-      if (/new THREE\.\w+Geometry\([^)]*\)[^;]*;\s*$/m.test(s) && /\bupdate\s*\(/.test(s) && /update\([^)]*\)\s*\{[^}]*new THREE\.(Vector3|Matrix4|Color)\(/s.test(s)) findings.push({ severity: 'medium', file: f, title: 'per-frame allocation', detail: 'update() allocates THREE objects every frame; hoist to fields to avoid GC hitches on mobile' });
+      // per-frame allocations: `new THREE.Vector3|Matrix4|Color|Quaternion` inside update()/frame() bodies (lazy `||` caches excluded)
+      for (const m of s.matchAll(/\n\s{2}(update|frame|loop)\s*\([^)]*\)\s*\{([\s\S]*?)\n\s{2}\}/g)) {
+        const hot = m[2].split("\n").filter((l) => /new THREE\.(Vector[234]|Matrix4|Color|Quaternion|Euler)\(/.test(l) && !/\|\|\s*\(|\?\?=/.test(l) && !/^\s*\w+:\s*new THREE/.test(l));
+        if (hot.length) findings.push({ severity: 'medium', file: f, title: `per-frame allocation in ${m[1]}()`, detail: `${hot.length} THREE object allocations per frame; hoist to fields to avoid GC hitches` });
+      }
     }
     const review = await llmReview('build/code-review agent', 'Code-review the most recently changed game files for bugs, leaks, race conditions, and gameplay logic errors.', recentFiles(3));
     return { pass: issues.length === 0, issues, findings, review, info: { bundleKB: Math.round(kb), buildMs: Date.now() - t0, lintedFiles: files.length } };

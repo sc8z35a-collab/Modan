@@ -256,10 +256,12 @@ class Game {
     this.audio.init();
     this.audio.setVolume(parseFloat($('optVol').value));
     // fullscreen + landscape lock (mobile)
-    try {
-      if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
-      await screen.orientation?.lock?.('landscape');
-    } catch { /* not supported */ }
+    await this.enterFullscreen();
+    // re-enter fullscreen on the next touch if the user swiped it away (Android back gesture / notification shade)
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement && this.started) window.addEventListener('touchend', () => this.enterFullscreen(), { once: true });
+    });
+    this.requestWakeLock();
     if (cont) {
       const d = this.state.load();
       if (d?.player) { this.player.pos.set(d.player.x, 0, d.player.z); this.player.yaw = d.player.yaw; }
@@ -272,7 +274,19 @@ class Game {
     this.ui.refresh();
     this.ui.toast(cont ? 'おかえりなさい' : '湖畔の森へようこそ。まずは薪を集めよう');
     this.saveTimer = 0;
-    document.addEventListener('visibilitychange', () => { if (document.hidden) { this.saveGame(); this.audio.ctx?.suspend(); } else this.audio.ctx?.resume(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { this.saveGame(); this.audio.ctx?.suspend(); } else { this.audio.ctx?.resume(); this.requestWakeLock(); } });
+  }
+
+  async enterFullscreen() {
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      await screen.orientation?.lock?.('landscape');
+    } catch { /* not supported / not allowed without gesture */ }
+  }
+
+  // keep the screen awake while camping (the phone would otherwise dim during idle fire-watching)
+  async requestWakeLock() {
+    try { this.wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* denied */ }
   }
 
   saveGame() {

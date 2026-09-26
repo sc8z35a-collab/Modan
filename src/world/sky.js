@@ -165,13 +165,21 @@ export class Sky {
 
   // hours: 0..24
   update(hours, dt, focus) {
+    const K = this._k || (this._k = {
+      sun: new THREE.Vector3(), moon: new THREE.Vector3(), zero: new THREE.Vector3(),
+      zDay: new THREE.Color(0.18, 0.38, 0.78), hDay: new THREE.Color(0.66, 0.78, 0.92),
+      zDusk: new THREE.Color(0.16, 0.2, 0.42), hDusk: new THREE.Color(1.0, 0.52, 0.28),
+      zNight: new THREE.Color(0.006, 0.011, 0.03), hNight: new THREE.Color(0.028, 0.045, 0.085),
+      sunDusk: new THREE.Color(1.0, 0.5, 0.2), hemiTint: new THREE.Color(0.6, 0.7, 0.85),
+      groundNight: new THREE.Color(0.018, 0.022, 0.035), fogNight: new THREE.Color(0.016, 0.024, 0.04),
+    });
     this.uniforms.uTime.value += dt;
     const t = (hours / 24) * Math.PI * 2;
     // sun path: rises east (+x), sets west, tilted south
     const el = Math.sin(t - Math.PI / 2); // -1 at 0h, 1 at 12h
     const az = t - Math.PI / 2;
-    const sun = new THREE.Vector3(Math.cos(az) * -1, el * 0.92 + 0.02, Math.sin(az) * 0.45 - 0.35).normalize();
-    const moon = new THREE.Vector3(-sun.x * 0.9 + 0.2, -sun.y * 0.85 + 0.15, -sun.z + 0.3).normalize();
+    const sun = K.sun.set(Math.cos(az) * -1, el * 0.92 + 0.02, Math.sin(az) * 0.45 - 0.35).normalize();
+    const moon = K.moon.set(-sun.x * 0.9 + 0.2, -sun.y * 0.85 + 0.15, -sun.z + 0.3).normalize();
     this.uniforms.uSun.value.copy(sun);
     this.uniforms.uMoon.value.copy(moon);
     const sunH = sun.y;
@@ -180,18 +188,16 @@ export class Sky {
     this.info.night = night; this.info.dusk = dusk; this.info.sunH = sunH;
     this.uniforms.uNight.value = night;
 
-    const zDay = new THREE.Color(0.18, 0.38, 0.78), hDay = new THREE.Color(0.66, 0.78, 0.92);
-    const zDusk = new THREE.Color(0.16, 0.2, 0.42), hDusk = new THREE.Color(1.0, 0.52, 0.28);
-    const zNight = new THREE.Color(0.004, 0.008, 0.022), hNight = new THREE.Color(0.02, 0.035, 0.07);
+    const { zDay, hDay, zDusk, hDusk, zNight, hNight } = K;
     const Z = this.uniforms.uZenith.value.copy(zDay).lerp(zDusk, dusk).lerp(zNight, night);
     const H = this.uniforms.uHorizon.value.copy(hDay).lerp(hDusk, dusk).lerp(hNight, night);
     this.uniforms.uGround.value.copy(H).multiplyScalar(0.35);
-    const sunCol = this.uniforms.uSunCol.value.setRGB(1.0, 0.95, 0.86).lerp(new THREE.Color(1.0, 0.5, 0.2), dusk);
+    const sunCol = this.uniforms.uSunCol.value.setRGB(1.0, 0.95, 0.86).lerp(K.sunDusk, dusk);
 
     // lights: sun by day, moon by night
     const useMoon = sunH < -0.04;
     const ldir = useMoon ? moon : sun;
-    const f = focus || new THREE.Vector3();
+    const f = focus || K.zero;
     // snap shadow camera to texel grid to avoid shimmering
     const e = this.shadowExtent, texel = (2 * e) / this.sun.shadow.mapSize.x;
     const fx = Math.round(f.x / texel) * texel, fz = Math.round(f.z / texel) * texel;
@@ -200,17 +206,17 @@ export class Sky {
     this.sunDir.copy(ldir);
     if (useMoon) {
       this.sun.color.setRGB(0.55, 0.66, 1.0);
-      this.sun.intensity = 0.32 * smoothstep(-0.02, 0.25, moon.y);
+      this.sun.intensity = 0.42 * smoothstep(-0.02, 0.25, moon.y);
     } else {
       this.sun.color.copy(sunCol);
       this.sun.intensity = 3.6 * smoothstep(-0.04, 0.18, sunH);
     }
-    this.hemi.color.copy(Z).lerp(new THREE.Color(0.6, 0.7, 0.85), 0.35);
-    this.hemi.groundColor.setRGB(0.16, 0.13, 0.08).lerp(new THREE.Color(0.01, 0.012, 0.02), night);
-    this.hemi.intensity = lerp(0.9, 0.18, night) + dusk * 0.15;
+    this.hemi.color.copy(Z).lerp(K.hemiTint, 0.35);
+    this.hemi.groundColor.setRGB(0.16, 0.13, 0.08).lerp(K.groundNight, night);
+    this.hemi.intensity = lerp(0.9, 0.26, night) + dusk * 0.15;
 
     const fogC = this.scene.fog.color.copy(H).lerp(Z, 0.15);
-    fogC.lerp(new THREE.Color(0.012, 0.018, 0.03), night * 0.6);
+    fogC.lerp(K.fogNight, night * 0.6);
     this.scene.fog.density = lerp(0.0026, 0.0048, night) + dusk * 0.001;
 
     // refresh env map periodically

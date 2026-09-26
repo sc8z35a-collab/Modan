@@ -1,17 +1,17 @@
 {
-  "at": "2026-09-26T11:18:49.563Z",
-  "totalMs": 5151,
+  "at": "2026-09-26T11:36:12.034Z",
+  "totalMs": 5344,
   "llm": {
     "available": false,
     "status": "free_plan_block",
-    "ms": 326,
+    "ms": 319,
     "detail": "Free-plan credits can't be used with the Genspark API / LLM proxy. Please visit https://www.genspark.ai/pricing?fromurl=credit_exhausted&entry=llm_proxy to subscribe or purchase credits to use this en"
   },
   "allPass": true,
   "results": [
     {
       "name": "asset-agent",
-      "ms": 100,
+      "ms": 90,
       "pass": true,
       "issues": [],
       "info": {
@@ -29,30 +29,23 @@
     },
     {
       "name": "build-agent",
-      "ms": 4797,
+      "ms": 4998,
       "pass": true,
       "issues": [],
-      "findings": [
-        {
-          "severity": "medium",
-          "file": "src/world/sky.js",
-          "title": "per-frame allocation",
-          "detail": "update() allocates THREE objects every frame; hoist to fields to avoid GC hitches on mobile"
-        }
-      ],
+      "findings": [],
       "review": {
         "mode": "local",
         "api": "free_plan_block"
       },
       "info": {
-        "bundleKB": 1040,
-        "buildMs": 4797,
+        "bundleKB": 1045,
+        "buildMs": 4997,
         "lintedFiles": 21
       }
     },
     {
       "name": "shader-agent",
-      "ms": 74,
+      "ms": 61,
       "pass": true,
       "issues": [],
       "findings": [
@@ -61,6 +54,12 @@
           "file": "src/fx/fire.js",
           "title": "discard + blending",
           "detail": "alpha-tested and blended in same material defeats early-Z on tiled GPUs"
+        },
+        {
+          "severity": "low",
+          "file": "src/world/props.js",
+          "title": "pow() of possibly negative base",
+          "detail": "undefined on Adreno/Mali; clamp base with max(x, 0.0)"
         }
       ],
       "review": {
@@ -73,7 +72,7 @@
     },
     {
       "name": "perf-agent",
-      "ms": 48,
+      "ms": 38,
       "pass": true,
       "issues": [],
       "info": {
@@ -81,21 +80,21 @@
         "grassBlades": 400000,
         "treeAttempts": 26000,
         "pointLights": 6,
-        "snap_camp": {
-          "tris": 4976436,
-          "calls": 2238
-        },
         "snap_lake": {
-          "tris": 4896662,
-          "calls": 2146
+          "tris": 2286856,
+          "calls": 1063
         },
         "snap_night": {
-          "tris": 4841485,
-          "calls": 2119
+          "tris": 4924533,
+          "calls": 2174
         },
         "snap_pcamp": {
           "tris": 5015032,
           "calls": 2217
+        },
+        "snap_tent": {
+          "tris": 5693574,
+          "calls": 2258
         }
       },
       "findings": [],
@@ -106,23 +105,10 @@
     },
     {
       "name": "mobile-agent",
-      "ms": 13,
+      "ms": 14,
       "pass": true,
       "issues": [],
-      "findings": [
-        {
-          "severity": "low",
-          "file": "public/manifest.webmanifest",
-          "title": "no icons",
-          "detail": "Add 192/512 icons so \"Add to Home screen\" installs as fullscreen PWA"
-        },
-        {
-          "severity": "medium",
-          "file": "src/main.js",
-          "title": "screen sleep",
-          "detail": "use navigator.wakeLock.request(\"screen\") so the phone does not dim during idle camp moments"
-        }
-      ],
+      "findings": [],
       "review": {
         "mode": "local",
         "api": "free_plan_block"
@@ -130,7 +116,7 @@
     },
     {
       "name": "visual-agent",
-      "ms": 367,
+      "ms": 335,
       "pass": true,
       "issues": [],
       "findings": [
@@ -138,7 +124,7 @@
           "severity": "medium",
           "file": "night.png",
           "title": "crushed blacks",
-          "detail": "28.63% pixels near black"
+          "detail": "30.85% pixels near black"
         }
       ],
       "review": {
@@ -146,26 +132,19 @@
         "api": "free_plan_block"
       },
       "info": {
-        "camp.png": {
-          "mean": 91.2,
-          "contrast": 41.8,
-          "clipHi": 0.02,
-          "clipLo": 0.12,
-          "sat": 0.373
-        },
         "lake.png": {
-          "mean": 99.7,
-          "contrast": 41.6,
+          "mean": 113.4,
+          "contrast": 37.5,
           "clipHi": 0,
-          "clipLo": 0.09,
-          "sat": 0.254
+          "clipLo": 0.21,
+          "sat": 0.299
         },
         "night.png": {
-          "mean": 24.8,
-          "contrast": 30.5,
-          "clipHi": 0.04,
-          "clipLo": 28.63,
-          "sat": 0.682
+          "mean": 22.9,
+          "contrast": 28,
+          "clipHi": 0.06,
+          "clipLo": 30.85,
+          "sat": 0.611
         },
         "pcamp.png": {
           "mean": 92.6,
@@ -173,6 +152,13 @@
           "clipHi": 0.05,
           "clipLo": 0.1,
           "sat": 0.415
+        },
+        "tent.png": {
+          "mean": 84.6,
+          "contrast": 27.7,
+          "clipHi": 0,
+          "clipLo": 0.04,
+          "sat": 0.27
         }
       }
     }
