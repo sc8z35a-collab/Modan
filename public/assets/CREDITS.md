@@ -3,9 +3,10 @@
 All textures and models are from [Poly Haven](https://polyhaven.com) and are licensed CC0 (public domain).
 
 - forest_ground_04: https://polyhaven.com/a/forest_ground_04
+- aerial_grass_rock: https://polyhaven.com/a/aerial_grass_rock
+- brown_planks_05: https://polyhaven.com/a/brown_planks_05
 - forrest_ground_01: https://polyhaven.com/a/forrest_ground_01
 - rocky_terrain_02: https://polyhaven.com/a/rocky_terrain_02
-- brown_mud_leaves_01: https://polyhaven.com/a/brown_mud_leaves_01
 - pine_bark: https://polyhaven.com/a/pine_bark
 - bark_brown_02: https://polyhaven.com/a/bark_brown_02
 - coast_sand_rocks_02: https://polyhaven.com/a/coast_sand_rocks_02

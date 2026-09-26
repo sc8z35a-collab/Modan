@@ -22,6 +22,8 @@
   },
   "homepage": "https://github.com/sc8z35a-collab/Modan#readme",
   "dependencies": {
+    "n8ao": "^2.0.1",
+    "postprocessing": "^6.39.5",
     "three": "^0.170.0"
   },
   "devDependencies": {
