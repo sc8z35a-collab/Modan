@@ -3,3 +3,4 @@ dist/
 .agents/cache/
 *.log
 .env
+.agents/shots/
