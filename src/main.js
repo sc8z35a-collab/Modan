@@ -374,8 +374,8 @@ class Game {
 
     // render
     this.reflT = (this.reflT || 0) + 1;
-    this.water.renderReflection([this.grass.layers[0], this.grass.layers[1], this.particles.rain, this.viewmodel.root]);
-    this.R.render(dt);
+    if (!params.has('norefl')) this.water.renderReflection([this.grass.layers[0], this.grass.layers[1], this.particles.rain, this.viewmodel.root]);
+    if (params.has('nocomposer')) this.R.r.render(this.scene, this.camera); else this.R.render(dt);
   }
 }
 

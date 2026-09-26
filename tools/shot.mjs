@@ -10,7 +10,7 @@ const out = pos[1] || '.agents/shots/shot';
 fs.mkdirSync(out.split('/').slice(0, -1).join('/') || '.', { recursive: true });
 
 const browser = await chromium.launch({
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-sandbox'],
+  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--renderer-process-limit=1', '--disable-extensions'],
 });
 // Pixel-class Android in landscape
 const ctx = await browser.newContext({
@@ -23,7 +23,7 @@ page.on('console', (m) => { logs.push(`[${m.type()}] ${m.text()}`); if (process.
 page.on('crash', () => console.log('CRASH'));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
 const q = args.q || 'qa';
-await page.goto(`${url}?q=${q}&autostart=1&fps=1`, { waitUntil: 'load', timeout: 120000 });
+await page.goto(`${url}?q=${q}&autostart=1&fps=1${args.extra ? '&' + args.extra : ''}`, { waitUntil: 'load', timeout: 120000 });
 await page.waitForFunction(() => window.__game && window.__game.started, null, { timeout: 600000 }).catch(() => {});
 const setup = async () => page.evaluate(({ hours, p }) => {
   const g = window.__game; if (!g) return 'no game';
