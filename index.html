@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1410" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="screen-orientation" content="landscape" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <title>Modan Camp — 湖畔の森</title>
+  <link rel="stylesheet" href="/src/ui/style.css" />
+</head>
+<body>
+  <canvas id="gl"></canvas>
+
+  <!-- Loading -->
+  <div id="loading" class="screen">
+    <div class="load-inner">
+      <div class="logo">MODAN<span>CAMP</span></div>
+      <div class="sub">湖畔の森で過ごす、ひとりキャンプ</div>
+      <div class="bar"><i id="loadbar"></i></div>
+      <div id="loadtxt" class="loadtxt">森を準備しています…</div>
+    </div>
+  </div>
+
+  <!-- Title -->
+  <div id="title" class="screen hidden">
+    <div class="title-inner">
+      <div class="logo big">MODAN<span>CAMP</span></div>
+      <div class="sub">湖畔の森 — Lakeside Forest</div>
+      <button id="btnStart" class="btn-primary">タップしてはじめる</button>
+      <button id="btnContinue" class="btn-ghost hidden">つづきから</button>
+      <div class="hint">スマホを横向きにして遊んでください · 音声あり推奨</div>
+    </div>
+  </div>
+
+  <!-- Rotate overlay (portrait) -->
+  <div id="rotate" class="screen">
+    <div class="rot-icon"></div>
+    <div>端末を横向きにしてください</div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="topleft">
+      <div id="clock"><span id="clockTime">15:00</span><span id="clockDay">1日目</span></div>
+      <div class="stats">
+        <div class="stat" id="stHunger"><b>🍖</b><div class="sbar"><i></i></div></div>
+        <div class="stat" id="stWarm"><b>🔥</b><div class="sbar"><i></i></div></div>
+        <div class="stat" id="stEnergy"><b>⚡</b><div class="sbar"><i></i></div></div>
+      </div>
+    </div>
+    <div id="quest"><div class="qtitle" id="questTitle"></div><div class="qdesc" id="questDesc"></div></div>
+    <div id="inventory"></div>
+    <div id="topright">
+      <button class="icon-btn" id="btnPhoto" title="写真モード">📷</button>
+      <button class="icon-btn" id="btnMenu" title="メニュー">☰</button>
+    </div>
+    <div id="crosshair"></div>
+    <div id="toast"></div>
+    <div id="joyzone"><div id="joybase"><div id="joyknob"></div></div></div>
+    <div id="lookzone"></div>
+    <div id="actions">
+      <button id="btnAction" class="act hidden"><span id="actLabel">調べる</span></button>
+      <button id="btnRun" class="round">走</button>
+      <button id="btnCrouch" class="round">屈</button>
+    </div>
+    <div id="minigame" class="hidden"></div>
+  </div>
+
+  <!-- Menu -->
+  <div id="menu" class="screen hidden">
+    <div class="panel">
+      <h2>メニュー</h2>
+      <label>グラフィック
+        <select id="optQuality">
+          <option value="ultra">ウルトラ</option>
+          <option value="high">高</option>
+          <option value="medium">中</option>
+        </select>
+      </label>
+      <label>時間の流れ
+        <select id="optTime">
+          <option value="1">標準 (1秒=1分)</option>
+          <option value="2">速い</option>
+          <option value="0.5">ゆっくり</option>
+        </select>
+      </label>
+      <label>視点感度 <input id="optSens" type="range" min="0.4" max="2.5" step="0.1" value="1.2" /></label>
+      <label>音量 <input id="optVol" type="range" min="0" max="1" step="0.05" value="0.8" /></label>
+      <label class="row"><input id="optFps" type="checkbox" /> FPS表示</label>
+      <div class="menu-btns">
+        <button id="btnSave" class="btn-ghost">セーブ</button>
+        <button id="btnResume" class="btn-primary">つづける</button>
+      </div>
+      <div class="credits">Textures &amp; models: Poly Haven (CC0)</div>
+    </div>
+  </div>
+
+  <div id="photoHint" class="hidden">写真モード · 画面をタップで戻る</div>
+  <div id="fps" class="hidden"></div>
+  <div id="fade"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "Modan Camp",
+  "short_name": "ModanCamp",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b1410",
+  "theme_color": "#0b1410",
+  "start_url": "/",
+  "icons": []
+}
