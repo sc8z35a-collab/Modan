@@ -32,7 +32,7 @@ class Game {
     this.audio = new AudioEngine();
 
     setLoad(0.02, 'アセットを読み込み中…');
-    this.assets = await loadAssets(this.R.r, (p) => setLoad(0.05 + p * 0.55));
+    this.assets = await loadAssets(this.R.r, (p) => setLoad(0.05 + p * 0.55), this.R.q.texMax || 0);
     const tick = () => new Promise((r) => setTimeout(r, 16));
 
     this.sky = new Sky(this.R.r, this.scene);

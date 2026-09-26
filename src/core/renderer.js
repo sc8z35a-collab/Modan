@@ -9,6 +9,8 @@ import { N8AOPostPass } from 'n8ao';
 export const QUALITY = {
   ultra: { pixelRatio: 2.0, shadow: 4096, ao: true, aoHalf: false, grass: 1.0, trees: 1.0, water: 0.6, bloom: true, smaa: true },
   high: { pixelRatio: 1.6, shadow: 2048, ao: true, aoHalf: true, grass: 0.7, trees: 0.8, water: 0.5, bloom: true, smaa: true },
+  // QA-only profile for headless CI in a 1GB sandbox (never used on device)
+  qa: { pixelRatio: 1.0, shadow: 1024, ao: true, aoHalf: true, grass: 0.25, trees: 0.35, water: 0.3, bloom: true, smaa: true, texMax: 256 },
   medium: { pixelRatio: 1.25, shadow: 2048, ao: false, aoHalf: true, grass: 0.45, trees: 0.6, water: 0.35, bloom: true, smaa: false },
 };
 

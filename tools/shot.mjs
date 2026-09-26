@@ -21,7 +21,7 @@ const page = await ctx.newPage();
 const logs = [];
 page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
-const q = args.q || 'medium';
+const q = args.q || 'qa';
 await page.goto(`${url}?q=${q}&autostart=1&fps=1`, { waitUntil: 'load', timeout: 120000 });
 await page.waitForFunction(() => window.__game && window.__game.started, null, { timeout: 600000 }).catch(() => {});
 const setup = async () => page.evaluate(({ hours, p }) => {
