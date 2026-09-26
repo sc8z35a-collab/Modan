@@ -34,7 +34,7 @@ export async function loadAssets(renderer, onProgress, texMax = 0) {
   }
   const models = {};
   for (const id of MODEL_IDS) {
-    jobs.push(gl.loadAsync(`/assets/models/${id}/${id}_1k.gltf`).then((g) => { models[id] = g.scene; }));
+    jobs.push(gl.loadAsync(`/assets/models/${id}/${id}_rt.gltf`).then((g) => { models[id] = g.scene; }));
   }
   await Promise.all(jobs);
   return { textures, models };
