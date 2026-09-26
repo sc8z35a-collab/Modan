@@ -1,0 +1,110 @@
+{
+  "at": "2026-09-26T09:46:47.686Z",
+  "totalMs": 5339,
+  "llm": {
+    "available": false,
+    "status": "free_plan_block",
+    "detail": "Free-plan credits can't be used with the Genspark API / LLM proxy. Please visit https://www.genspark.ai/pricing?fromurl=credit_exhausted&entry=llm_proxy to subs"
+  },
+  "allPass": false,
+  "results": [
+    {
+      "name": "asset-agent",
+      "ms": 91,
+      "pass": true,
+      "issues": [],
+      "info": {
+        "boulder_01": 1965,
+        "rock_moss_set_01": 3782,
+        "tree_stump_01": 2460,
+        "dead_tree_trunk": 5080,
+        "fern_02": 2176,
+        "shrub_01": 9225,
+        "dry_branches_medium_01": 4197,
+        "namaqualand_stones_01": 2800,
+        "assetsMB": 35
+      }
+    },
+    {
+      "name": "build-agent",
+      "ms": 4948,
+      "pass": true,
+      "issues": [],
+      "info": {
+        "bundleKB": 1039,
+        "buildMs": 4948
+      }
+    },
+    {
+      "name": "shader-agent",
+      "ms": 60,
+      "pass": true,
+      "issues": [],
+      "info": {
+        "files": 8
+      },
+      "review": {
+        "mode": "local",
+        "api": "free_plan_block"
+      }
+    },
+    {
+      "name": "perf-agent",
+      "ms": 31,
+      "pass": false,
+      "issues": [
+        "snapshot camp_dusk.json: 36.5M tris > 12M budget"
+      ],
+      "info": {
+        "ultra": "pixelRatio: 2.0, shadow: 4096, ao: true, aoHalf: false, grass: 1.0, trees: 1.0, water: 0.6, bloom: true, smaa: true",
+        "grassBlades": 400000,
+        "treeAttempts": 26000,
+        "snap_camp_dusk": {
+          "tris": 36525301,
+          "calls": 2966
+        },
+        "snap_lake": {
+          "tris": 4634059,
+          "calls": 2096
+        },
+        "snap_night": {
+          "tris": 4711311,
+          "calls": 2070
+        }
+      },
+      "review": {
+        "mode": "local",
+        "api": "free_plan_block"
+      }
+    },
+    {
+      "name": "mobile-agent",
+      "ms": 30,
+      "pass": true,
+      "issues": [],
+      "review": {
+        "mode": "local",
+        "api": "free_plan_block"
+      }
+    },
+    {
+      "name": "review-agent",
+      "ms": 29,
+      "pass": true,
+      "issues": [],
+      "info": {
+        "changed": [
+          "src/fx/fire.js",
+          "src/main.js",
+          "src/world/terrain.js",
+          "src/world/trees.js",
+          "src/world/world.js"
+        ]
+      },
+      "review": {
+        "mode": "local",
+        "api": "free_plan_block"
+      }
+    }
+  ]
+}

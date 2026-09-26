@@ -95,6 +95,17 @@ export function windify(mat, U, strength = 1, isLeaf = false) {
           transformed += normal * fl;` : ''}
         }`);
     if (isLeaf) {
+      // mip-aware alpha: keep foliage coverage at distance (prevents "stick trees")
+      sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', `
+        #ifdef USE_MAP
+        {
+          vec2 tsz = vec2(textureSize(map, 0));
+          vec2 dx = dFdx(vMapUv * tsz), dy = dFdy(vMapUv * tsz);
+          float lod = max(0.0, 0.5 * log2(max(dot(dx, dx), dot(dy, dy))));
+          diffuseColor.a *= 1.0 + lod * 0.28;
+        }
+        #endif
+        #include <alphatest_fragment>`);
       sh.fragmentShader = sh.fragmentShader.replace('#include <aomap_fragment>', `#include <aomap_fragment>
         #if NUM_DIR_LIGHTS > 0
           float tr = pow(max(dot(normalize(vViewPosition), -directionalLights[0].direction), 0.0), 4.0);
@@ -245,7 +256,7 @@ export function createTreeKinds(textures, U, quality = 1) {
   const birchMat = mkFol(leafTex, 0xffffff);
   const birchBark = windify(new THREE.MeshStandardMaterial({ map: paintBirchBark(), roughness: 0.8 }), U, 0.6);
   // far LOD: solid cones (cheap), textured with same foliage via vertex color darkening
-  const farMat = new THREE.MeshStandardMaterial({ color: 0x1d3320, roughness: 0.95, flatShading: false });
+  const farMat = new THREE.MeshStandardMaterial({ color: 0x2c4a2c, roughness: 0.95 });
 
   const variants = [];
   const rnd = mulberry32(4242);
@@ -254,7 +265,7 @@ export function createTreeKinds(textures, U, quality = 1) {
     const h = 14 + v * 3.5 + rnd() * 2;
     const r = h * 0.22;
     const fol0 = buildConifer(rnd, { h, cards: Math.round(260 * quality), radius: r, droop: 0.45, cardLen: 2.2 });
-    const fol1 = buildConifer(rnd, { h, cards: Math.round(90 * quality), radius: r, droop: 0.45, cardLen: 3.0 });
+    const fol1 = buildConifer(rnd, { h, cards: Math.round(150 * quality), radius: r, droop: 0.45, cardLen: 3.2 });
     const cone = new THREE.ConeGeometry(r * 1.05, h * 0.82, 9, 3); cone.translate(0, h * 0.18 + h * 0.41, 0);
     const trunk0 = trunkGeo(h, 0.28 + v * 0.05, 0.04, 12, 10, 0.1, rnd);
     const trunk1 = trunkGeo(h, 0.28 + v * 0.05, 0.04, 6, 2, 0, rnd);
@@ -268,7 +279,7 @@ export function createTreeKinds(textures, U, quality = 1) {
   for (let v = 0; v < 3; v++) {
     const h = 18 + v * 3;
     const fol0 = buildConifer(rnd, { h, cards: Math.round(170 * quality), crown: 0.45, radius: 3.2, droop: 0.15, cardLen: 2.6 });
-    const fol1 = buildConifer(rnd, { h, cards: 60, crown: 0.45, radius: 3.2, droop: 0.15, cardLen: 3.4 });
+    const fol1 = buildConifer(rnd, { h, cards: 110, crown: 0.45, radius: 3.2, droop: 0.15, cardLen: 3.6 });
     const blob = new THREE.SphereGeometry(3, 8, 6); blob.scale(1, 1.4, 1); blob.translate(0, h * 0.78, 0);
     const trunk0 = trunkGeo(h, 0.36, 0.08, 12, 12, 0.5, rnd);
     const trunk1 = trunkGeo(h, 0.36, 0.08, 6, 2, 0.5, rnd);
