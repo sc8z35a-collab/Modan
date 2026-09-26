@@ -1,10 +1,10 @@
 # Agent pipeline report
 
-- time: 2026-09-26T09:46:47.686Z
+- time: 2026-09-26T09:53:36.961Z
 - LLM API: **unavailable** (free_plan_block)
-- result: **ISSUES FOUND** in 5339ms
+- result: **ALL PASS** in 5200ms
 
-## ✅ asset-agent (91ms)
+## ✅ asset-agent (57ms)
 ```json
 {
  "boulder_01": 1965,
@@ -15,19 +15,19 @@
  "shrub_01": 9225,
  "dry_branches_medium_01": 4197,
  "namaqualand_stones_01": 2800,
- "assetsMB": 35
+ "assetsMB": 21
 }
 ```
 
-## ✅ build-agent (4948ms)
+## ✅ build-agent (4873ms)
 ```json
 {
- "bundleKB": 1039,
- "buildMs": 4948
+ "bundleKB": 1040,
+ "buildMs": 4872
 }
 ```
 
-## ✅ shader-agent (60ms)
+## ✅ shader-agent (35ms)
 ```json
 {
  "files": 8
@@ -35,15 +35,23 @@
 ```
 - review mode: local (LLM free_plan_block)
 
-## ❌ perf-agent (31ms)
+## ✅ perf-agent (11ms)
 ```json
 {
  "ultra": "pixelRatio: 2.0, shadow: 4096, ao: true, aoHalf: false, grass: 1.0, trees: 1.0, water: 0.6, bloom: true, smaa: true",
  "grassBlades": 400000,
  "treeAttempts": 26000,
- "snap_camp_dusk": {
-  "tris": 36525301,
-  "calls": 2966
+ "snap_camp2": {
+  "tris": 4978212,
+  "calls": 2204
+ },
+ "snap_forest": {
+  "tris": 3098016,
+  "calls": 1331
+ },
+ "snap_forest2": {
+  "tris": 3178074,
+  "calls": 1330
  },
  "snap_lake": {
   "tris": 4634059,
@@ -55,13 +63,12 @@
  }
 }
 ```
-- snapshot camp_dusk.json: 36.5M tris > 12M budget
 - review mode: local (LLM free_plan_block)
 
-## ✅ mobile-agent (30ms)
+## ✅ mobile-agent (10ms)
 - review mode: local (LLM free_plan_block)
 
-## ✅ review-agent (29ms)
+## ✅ review-agent (9ms)
 ```json
 {
  "changed": [
