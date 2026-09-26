@@ -83,6 +83,32 @@ class Game {
     if (GameState.hasSave()) $('btnContinue').classList.remove('hidden');
     window.__game = this;
     if (params.has('autostart')) this.start(false);
+    if (params.has('snap')) this.runSnapshots();
+  }
+
+  // QA: render scripted shots and POST them to the QA server (tools/qa-server.mjs)
+  async runSnapshots() {
+    const shots = (params.get('snap') || 'default').split(';').map((spec) => {
+      const [name, hours, pos, extra] = spec.split('|');
+      return { name, hours: hours ? +hours : null, pos: pos ? pos.split(',').map(Number) : null, extra: extra || '' };
+    });
+    for (const sh of shots) {
+      if (sh.hours !== null) this.state.hours = sh.hours;
+      if (sh.pos) { const [x, z, yaw, pitch] = sh.pos; this.player.pos.set(x, 0, z); this.player.yaw = yaw; this.player.pitch = pitch || 0; }
+      if (sh.extra.includes('fire')) { this.fire.addFuel(1); this.fire.ignite(); this.fire.intensity = 1; this.fireLogs.visible = true; }
+      if (sh.extra.includes('rain')) this.rain = 1;
+      this.state.timeScale = 0; this.sky.envTimer = 99;
+      await new Promise((r) => setTimeout(r, 2500));
+      const png = this.R.r.domElement.toDataURL('image/jpeg', 0.85);
+      const i = this.R.r.info;
+      await fetch('/__snap', { method: 'POST', body: JSON.stringify({ name: sh.name, png, info: { fps: $('fps').textContent, tris: i.render.triangles, calls: i.render.calls, trees: this.world.treeCount, ua: navigator.userAgent, gpu: this.gpuName() } }) }).catch(() => {});
+    }
+    document.title = 'SNAP DONE';
+  }
+
+  gpuName() {
+    const gl = this.R.r.getContext(); const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'unknown';
   }
 
   buildCamp() {

@@ -21,7 +21,7 @@ export class Renderer {
     this.q = QUALITY[qualityName];
     const r = new THREE.WebGLRenderer({
       canvas, antialias: false, stencil: false, depth: true, powerPreference: 'high-performance',
-      preserveDrawingBuffer: false,
+      preserveDrawingBuffer: new URLSearchParams(location.search).has('snap'),
     });
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.NoToneMapping;
