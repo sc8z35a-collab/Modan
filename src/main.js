@@ -69,7 +69,7 @@ class Game {
     this.sky.update(this.state.hours, 0.016, this.player.pos);
     this.player.update(0, this.input);
     this.R.r.compile(this.scene, this.camera);
-    for (let i = 0; i < 2; i++) this.frame(1 / 60, true);
+    if (!params.has('snap')) for (let i = 0; i < 2; i++) this.frame(1 / 60, true);
     setLoad(1, '準備完了');
     this.setupMenus();
     this.last = performance.now();
@@ -97,13 +97,13 @@ class Game {
       if (sh.pos) { const [x, z, yaw, pitch] = sh.pos; this.player.pos.set(x, 0, z); this.player.yaw = yaw; this.player.pitch = pitch || 0; }
       if (sh.extra.includes('fire')) { this.fire.addFuel(1); this.fire.ignite(); this.fire.intensity = 1; this.fireLogs.visible = true; }
       if (sh.extra.includes('rain')) this.rain = 1;
-      this.state.timeScale = 0; this.sky.envTimer = 99;
-      await new Promise((r) => setTimeout(r, 2500));
+      this.state.timeScale = 0; this.sky.envTimer = 99; this.snapping = true;
+      for (let k = 0; k < 3; k++) { this.frame(1 / 30); await new Promise((r) => setTimeout(r, 0)); }
       const png = this.R.r.domElement.toDataURL('image/jpeg', 0.85);
       const i = this.R.r.info;
       await fetch('/__snap', { method: 'POST', body: JSON.stringify({ name: sh.name, png, info: { fps: $('fps').textContent, tris: i.render.triangles, calls: i.render.calls, trees: this.world.treeCount, ua: navigator.userAgent, gpu: this.gpuName() } }) }).catch(() => {});
     }
-    document.title = 'SNAP DONE';
+    document.title = 'SNAP DONE'; this.snapping = false;
   }
 
   gpuName() {
@@ -292,6 +292,7 @@ class Game {
 
   loop(t) {
     requestAnimationFrame((tt) => this.loop(tt));
+    if (this.snapping) return;
     let dt = (t - this.last) / 1000; this.last = t;
     dt = Math.min(dt, 1 / 20);
     this.frame(dt);
