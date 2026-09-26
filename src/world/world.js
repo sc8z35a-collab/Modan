@@ -57,7 +57,7 @@ export class World {
   constructor(renderer, scene, assets, quality) {
     this.renderer = renderer; this.scene = scene; this.assets = assets; this.q = quality;
     this.colliders = new Colliders(8);
-    this.scatter = new Scatter(scene, 48);
+    this.scatter = new Scatter(scene, 64);
     this.U = { uTime: { value: 0 }, uWind: { value: new THREE.Vector2(0.8, 0.35) }, uTentGlow: { value: 0 } };
     this.pickups = [];     // interactive collectibles
     this.choppables = [];  // dead trunks / stumps you can chop
@@ -171,8 +171,8 @@ export class World {
     };
     this.defineModelKind('boulder', models.boulder_01, [260]);
     this.defineModelKind('mossrocks', models.rock_moss_set_01, [140]);
-    this.defineModelKind('stones', models.namaqualand_stones_01, [90], { castShadow: false });
-    this.defineModelKind('fern', models.fern_02, [70], { wind: 0.5, alpha: true, castShadow: true });
+    this.defineModelKind('stones', models.namaqualand_stones_01, [80], { castShadow: false });
+    this.defineModelKind('fern', models.fern_02, [55], { wind: 0.5, alpha: true, castShadow: false });
     this.defineModelKind('shrub', models.shrub_01, [60], { wind: 0.6, alpha: true });
     this.defineModelKind('stump', models.tree_stump_01, [120]);
 
@@ -181,7 +181,7 @@ export class World {
     place('boulder', 12, 20, { ox: -10, oz: -70 + 70, scale: [0.5, 1.2], sink: 0.2, collide: 1.1, filter: (x, z) => Math.abs(lakeDist(x, z)) < 5 });
     place('mossrocks', 90, 180, { scale: [0.8, 1.8], sink: 0.1, collide: 0.6, filter: land, align: true });
     place('stones', 160, 120, { scale: [0.7, 1.4], filter: (x, z, h) => h > 0.1, align: true, pad: 0 });
-    place('fern', Math.round(900 * this.q.grass + 200), 110, { scale: [0.8, 1.6], filter: (x, z, h) => h > 0.8 && coverageAt(x, z, h, 0)[1] > 0.4, align: true });
+    place('fern', Math.round(700 * this.q.grass + 150), 110, { scale: [0.8, 1.6], filter: (x, z, h) => h > 0.8 && coverageAt(x, z, h, 0)[1] > 0.4, align: true });
     place('shrub', 10, 70, { scale: [0.7, 1.1], filter: land, collide: 0.5 });
     place('stump', 26, 110, { scale: [0.8, 1.2], sink: 0.05, collide: 0.45, filter: land });
   }

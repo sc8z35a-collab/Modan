@@ -155,7 +155,7 @@ export class Campfire {
     this.light.position.x = Math.sin(this.time * 9.1) * 0.05;
     this.light.position.z = Math.cos(this.time * 7.7) * 0.05;
     this.fill.intensity = I * 10 * flick;
-    this.light.castShadow = I > 0.05;
+    this.light.castShadow = I > 0.05 && this.shadowAllowed !== false;
     this.glintColor.setRGB(1.0, 0.5, 0.15).multiplyScalar(I * flick);
     const emb = Math.max(I, this.lit ? 0 : Math.min(0.25, this.fuel) * 0.5);
     this.embers.material.color.setRGB(1.0 * emb * 2.2, 0.28 * emb * 2.2, 0.04 * emb);

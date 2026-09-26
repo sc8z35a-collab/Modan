@@ -123,6 +123,8 @@ class Game {
     this.fireLogs = put(P.buildFireLogs(tx), fx, fz);
     this.fireLogs.visible = false;
     this.fire = new Campfire(this.scene, new THREE.Vector3(fx, heightAt(fx, fz), fz));
+    this.fire.shadowAllowed = this.R.q.shadow >= 2048;
+    this.fire.light.shadow.mapSize.setScalar(this.R.q.shadow >= 4096 ? 1024 : 512);
     this.tripod = put(P.buildTripod(), fx, fz);
     this.kettle = P.buildKettle(); this.kettle.position.set(0, 0.81, 0); this.kettle.visible = false; this.tripod.add(this.kettle);
     this.world.colliders.add(fx, fz, 0.85, 'fire');

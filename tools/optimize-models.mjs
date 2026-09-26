@@ -13,7 +13,7 @@ const TARGETS = {
   namaqualand_stones_01: 0.04, // 70k -> ~2.8k
   tree_stump_01: 0.06,       // 41k -> ~2.5k
   dead_tree_trunk: 0.05,     // 101k -> ~5k (interactive, close-up)
-  fern_02: 0.5,              // 6k -> 3k (alpha cards: keep silhouette)
+  fern_02: 0.35,             // 6k -> 3k (alpha cards: keep silhouette)
   shrub_01: 0.06,            // 156k -> ~9k
   dry_branches_medium_01: 0.25, // 16k -> 4k
 };
