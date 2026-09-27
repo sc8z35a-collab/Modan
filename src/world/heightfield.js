@@ -37,8 +37,11 @@ export function heightAt(x, z) {
   // lake basin
   const ld = lakeDist(x, z);
   const shore = smoothstep(38, -2, ld);         // blend region around the lake
-  const depth = -1.2 - smoothstep(0, -40, ld) * 7.5 + fbm(n2, x * 0.02, z * 0.02, 2) * 0.6;
   const beach = 0.35 + clamp(ld, 0, 38) * 0.09;
+  // lakebed: starts at the beach height at the waterline (ld=0) and shelves down, so there is no
+  // 1.5m vertical cliff at the shoreline (previously depth jumped from +0.35 to -1.2 at ld=0)
+  const bed = -1.2 - smoothstep(0, -40, ld) * 7.5 + fbm(n2, x * 0.02, z * 0.02, 2) * 0.6;
+  const depth = lerp(0.35, bed, smoothstep(0, -3, ld));
   h = lerp(h, ld < 0 ? depth : Math.min(h, beach + (h - beach) * smoothstep(4, 38, ld)), shore);
 
   // campsite plateau

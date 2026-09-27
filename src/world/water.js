@@ -44,6 +44,10 @@ export class Water {
     this.mirrorCam = new THREE.PerspectiveCamera();
     this.ripples = Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, -100, 0));
     this.rippleIdx = 0;
+    // scratch objects for renderReflection (avoid per-frame allocations / GC hitches)
+    this._t = new THREE.Vector3(); this._look = new THREE.Vector3();
+    this._plane = new THREE.Plane(); this._cp = new THREE.Vector4(); this._q = new THREE.Vector4();
+    this._up = new THREE.Vector3(0, 1, 0);
 
     this.uniforms = {
       uTime: { value: 0 },
@@ -144,12 +148,15 @@ export class Water {
   }
 
   addRipple(x, z, strength = 1) {
-    const r = this.ripples[this.rippleIdx++ % this.ripples.length];
+    const r = this.ripples[this.rippleIdx];
+    this.rippleIdx = (this.rippleIdx + 1) % this.ripples.length;
     r.set(x, z, this.uniforms.uTime.value, strength);
   }
 
   resize(w, h) {
-    this.rt.setSize(Math.max(256, (w * this.rtScale) | 0), Math.max(256, (h * this.rtScale) | 0));
+    // keep aspect ratio of the screen (clamping each axis separately to 256 distorted reflections on tiny windows)
+    const k = Math.max(1, 256 / Math.max(1, Math.min(w, h) * this.rtScale));
+    this.rt.setSize(Math.max(1, (w * this.rtScale * k) | 0), Math.max(1, (h * this.rtScale * k) | 0));
   }
 
   update(dt, sky, fire) {
@@ -168,17 +175,21 @@ export class Water {
     const cam = this.camera, m = this.mirrorCam, r = this.renderer;
     const wl = WORLD.waterLevel;
     if (cam.position.y < wl) return;
-    m.copy(cam);
-    m.position.y = 2 * wl - cam.position.y;
-    const t = new THREE.Vector3(); cam.getWorldDirection(t); t.y *= -1;
-    m.up.set(0, -1, 0).applyQuaternion(new THREE.Quaternion()); m.up.set(0, 1, 0);
-    m.lookAt(m.position.clone().add(t));
+    // NOTE: non-recursive copy. Object3D.copy() is recursive by default, which cloned the camera's children
+    // (the first-person viewmodel: rod, axe, skewers...) into the mirror camera EVERY frame -> unbounded leak.
+    m.copy(cam, false);
+    cam.updateMatrixWorld();
+    m.position.setFromMatrixPosition(cam.matrixWorld);
+    m.position.y = 2 * wl - m.position.y;
+    const t = this._t; cam.getWorldDirection(t); t.y *= -1;
+    m.up.copy(this._up);
+    m.lookAt(this._look.copy(m.position).add(t));
     m.updateMatrixWorld(); m.projectionMatrix.copy(cam.projectionMatrix);
     // oblique clip plane
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -wl + 0.05);
+    const plane = this._plane.set(this._up, -wl + 0.05);
     plane.applyMatrix4(m.matrixWorldInverse);
-    const cp = new THREE.Vector4(plane.normal.x, plane.normal.y, plane.normal.z, plane.constant);
-    const pm = m.projectionMatrix, q = new THREE.Vector4();
+    const cp = this._cp.set(plane.normal.x, plane.normal.y, plane.normal.z, plane.constant);
+    const pm = m.projectionMatrix, q = this._q;
     q.x = (Math.sign(cp.x) + pm.elements[8]) / pm.elements[0];
     q.y = (Math.sign(cp.y) + pm.elements[9]) / pm.elements[5];
     q.z = -1; q.w = (1 + pm.elements[10]) / pm.elements[14];
