@@ -35,16 +35,22 @@ async function dl(url, dest) {
     try {
       const r = await fetch(url);
       if (!r.ok) throw new Error(r.status + ' ' + url);
-      fs.writeFileSync(dest, Buffer.from(await r.arrayBuffer()));
+      // write to a temp file then rename: an interrupted download left a truncated file that was then
+      // "skipped" forever because it existed with size > 0
+      fs.writeFileSync(dest + '.part', Buffer.from(await r.arrayBuffer()));
+      fs.renameSync(dest + '.part', dest);
       return true;
     } catch (e) {
       if (i === 2) throw e;
+      await new Promise((res) => setTimeout(res, 1000 * (i + 1)));
     }
   }
 }
 
 async function fetchTexture(id, res) {
-  const files = await (await fetch(`${API}/files/${id}`)).json();
+  const fr = await fetch(`${API}/files/${id}`);
+  if (!fr.ok) throw new Error(`files ${id}: ${fr.status}`);
+  const files = await fr.json();
   const pick = (k) => files[k]?.[res]?.jpg?.url;
   const maps = { diff: pick('Diffuse'), nor: pick('nor_gl'), arm: pick('arm') || pick('rough_ao') || pick('Rough') };
   for (const [k, url] of Object.entries(maps)) {
@@ -55,8 +61,11 @@ async function fetchTexture(id, res) {
 }
 
 async function fetchModel(id, res) {
-  const files = await (await fetch(`${API}/files/${id}`)).json();
-  const g = files.gltf[res].gltf;
+  const fr = await fetch(`${API}/files/${id}`);
+  if (!fr.ok) throw new Error(`files ${id}: ${fr.status}`);
+  const files = await fr.json();
+  const g = files.gltf?.[res]?.gltf;
+  if (!g) throw new Error(`no ${res} gltf for ${id}`);
   // source gltf/bin go to assets-src (decimated by tools/optimize-models.mjs); textures ship in public
   const dir = path.join(OUT, 'models', id), src = path.resolve('assets-src/models', id);
   await dl(g.url, path.join(src, path.basename(g.url)));
@@ -74,4 +83,5 @@ export async function fetchAll() {
     [...TEXTURES, ...MODELS].map(([i]) => `- ${i}: https://polyhaven.com/a/${i}`).join('\n') + '\n');
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) fetchAll().then(() => console.log('done'));
+import { pathToFileURL } from 'url';
+if (import.meta.url === pathToFileURL(process.argv[1]).href) fetchAll().then(() => console.log('done'), (e) => { console.error(e); process.exit(1); });

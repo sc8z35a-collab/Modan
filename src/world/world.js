@@ -6,7 +6,12 @@ import { buildTerrain, bakeWorldData, coverageAt, pathMask } from './terrain.js'
 import { Scatter, Colliders } from './scatter.js';
 import { createTreeKinds, windify } from './trees.js';
 import { mulberry32, smoothstep } from '../core/noise.js';
+import { posHash } from './props.js';
 
+// resolve assets against the deploy base (works at / and at a sub-path like /Modan/)
+// VITE_ASSET_BASE lets the Pages build (tools/build-pages.mjs) load the big textures/models straight from
+// ../public/ instead of shipping a second 21MB copy
+const BASE = import.meta.env?.VITE_ASSET_BASE || import.meta.env?.BASE_URL || './';
 const TEX_IDS = ['aerial_grass_rock', 'forest_ground_04', 'rocky_terrain_02', 'coast_sand_rocks_02', 'pine_bark', 'bark_brown_02', 'brown_planks_05'];
 const MODEL_IDS = ['boulder_01', 'rock_moss_set_01', 'tree_stump_01', 'dead_tree_trunk', 'fern_02', 'shrub_01', 'dry_branches_medium_01', 'namaqualand_stones_01'];
 
@@ -21,7 +26,7 @@ export async function loadAssets(renderer, onProgress, texMax = 0) {
   for (const id of TEX_IDS) {
     textures[id] = {};
     for (const k of ['diff', 'nor', 'arm']) {
-      jobs.push(tl.loadAsync(`/assets/textures/${id}/${k}.jpg`).then((t) => {
+      jobs.push(tl.loadAsync(`${BASE}assets/textures/${id}/${k}.jpg`).then((t) => {
         if (texMax && t.image.width > texMax) {
           const c = document.createElement('canvas'); c.width = c.height = texMax;
           c.getContext('2d').drawImage(t.image, 0, 0, texMax, texMax); t.image = c;
@@ -34,7 +39,7 @@ export async function loadAssets(renderer, onProgress, texMax = 0) {
   }
   const models = {};
   for (const id of MODEL_IDS) {
-    jobs.push(gl.loadAsync(`/assets/models/${id}/${id}_rt.gltf`).then((g) => { models[id] = g.scene; }));
+    jobs.push(gl.loadAsync(`${BASE}assets/models/${id}/${id}_rt.gltf`).then((g) => { models[id] = g.scene; }));
   }
   await Promise.all(jobs);
   return { textures, models };
@@ -84,7 +89,7 @@ export class World {
     if (Math.hypot(x - C.x, z - C.z) < C.r + pad) return false;
     if (pathMask(x, z) > 0.05) return false;
     // dock corridor
-    if (x > -10 && x < -2 && z < -8 && z > -32) return false;
+    if (x > -12 && x < -2 && z < -8 && z > -40) return false; // dock corridor now reaches the dock's far end
     return true;
   }
 
@@ -178,7 +183,8 @@ export class World {
 
     const land = (x, z, h) => h > 0.6;
     place('boulder', 70, 240, { scale: [0.6, 2.4], sink: 0.3, collide: 1.1, filter: land, align: true });
-    place('boulder', 12, 20, { ox: -10, oz: -70 + 70, scale: [0.5, 1.2], sink: 0.2, collide: 1.1, filter: (x, z) => Math.abs(lakeDist(x, z)) < 5 });
+    // shore boulders around the dock cove (the old offset centred them on the camp ~30m from water -> 0 placed)
+    place('boulder', 12, 24, { ox: -14, oz: -40, scale: [0.5, 1.2], sink: 0.2, collide: 1.1, filter: (x, z) => Math.abs(lakeDist(x, z)) < 5 });
     place('mossrocks', 90, 180, { scale: [0.8, 1.8], sink: 0.1, collide: 0.6, filter: land, align: true });
     place('stones', 160, 120, { scale: [0.7, 1.4], filter: (x, z, h) => h > 0.1, align: true, pad: 0 });
     place('fern', Math.round(700 * this.q.grass + 150), 110, { scale: [0.8, 1.6], filter: (x, z, h) => h > 0.8 && coverageAt(x, z, h, 0)[1] > 0.4, align: true });
@@ -262,7 +268,12 @@ export class World {
         const g = new THREE.Group();
         const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 3), leafMat);
         const bp = bush.geometry.attributes.position;
-        for (let j = 0; j < bp.count; j++) { const f = 0.75 + rnd() * 0.45; bp.setXYZ(j, bp.getX(j) * f, bp.getY(j) * f * 0.8, bp.getZ(j) * f); }
+        const seed = rnd() * 100; // per-bush variation, but per-POSITION displacement (no cracks)
+        for (let j = 0; j < bp.count; j++) {
+          const x = bp.getX(j), y = bp.getY(j), z = bp.getZ(j);
+          const f = 0.75 + posHash(+x.toFixed(4), +y.toFixed(4), +z.toFixed(4), seed) * 0.45;
+          bp.setXYZ(j, x * f, y * f * 0.8, z * f);
+        }
         bush.geometry.computeVertexNormals();
         bush.position.y = 0.35; bush.castShadow = true; g.add(bush);
         const berries = new THREE.Group();

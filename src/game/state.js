@@ -19,6 +19,9 @@ export const QUESTS = [
   { id: 'free', title: '自由にキャンプを楽しもう', desc: '釣り・採集・焚き火・コーヒー… 湖畔の森でのんびり過ごそう', check: () => false },
 ];
 
+const SAVE_KEY = 'modan-camp-save';
+const SAVE_VERSION = 1;
+
 export class GameState {
   constructor() { this.reset(); }
   reset() {
@@ -42,21 +45,32 @@ export class GameState {
   }
   add(item, n = 1) { this.inv[item] = Math.max(0, (this.inv[item] || 0) + n); }
   timeString() {
-    const h = Math.floor(this.hours), m = Math.floor((this.hours - h) * 60);
+    // normalise first: float error could produce "15:60" / "24:00"
+    const total = Math.floor((((this.hours % 24) + 24) % 24) * 60 + 1e-6) % 1440;
+    const h = Math.floor(total / 60), m = total % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
   save(extra = {}) {
-    const d = { v: 1, hours: this.hours, day: this.day, hunger: this.hunger, warmth: this.warmth, energy: this.energy, inv: this.inv, stats: this.stats, flags: this.flags, questIdx: this.questIdx, fire: this.fire, ...extra };
-    localStorage.setItem('modan-camp-save', JSON.stringify(d));
+    const d = { v: SAVE_VERSION, hours: this.hours, day: this.day, hunger: this.hunger, warmth: this.warmth, energy: this.energy, inv: this.inv, stats: this.stats, flags: this.flags, questIdx: this.questIdx, fire: this.fire, ...extra };
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); return true; } catch { return false; } // quota / private mode
   }
-  static hasSave() { return !!localStorage.getItem('modan-camp-save'); }
+  static hasSave() { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } }
   load() {
     try {
-      const d = JSON.parse(localStorage.getItem('modan-camp-save'));
-      if (!d) return null;
-      Object.assign(this, { hours: d.hours, day: d.day, hunger: d.hunger, warmth: d.warmth, energy: d.energy, questIdx: d.questIdx });
-      Object.assign(this.inv, d.inv); Object.assign(this.stats, d.stats); Object.assign(this.flags, d.flags);
-      this.fire = d.fire || this.fire;
+      const d = JSON.parse(localStorage.getItem(SAVE_KEY));
+      if (!d || typeof d !== 'object') return null;
+      // validate every field: a corrupted / older save must not inject NaN / undefined into the simulation
+      const num = (v, def, lo = -Infinity, hi = Infinity) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def);
+      this.hours = num(d.hours, this.hours, 0, 23.999);
+      this.day = Math.max(1, Math.floor(num(d.day, this.day)));
+      this.hunger = num(d.hunger, this.hunger, 0, 1);
+      this.warmth = num(d.warmth, this.warmth, 0, 1);
+      this.energy = num(d.energy, this.energy, 0, 1);
+      this.questIdx = Math.floor(num(d.questIdx, this.questIdx, 0, QUESTS.length - 1));
+      if (d.inv && typeof d.inv === 'object') for (const k of Object.keys(this.inv)) this.inv[k] = Math.floor(num(d.inv[k], 0, 0, 9999));
+      if (d.stats && typeof d.stats === 'object') for (const k of Object.keys(this.stats)) this.stats[k] = num(d.stats[k], this.stats[k], 0);
+      if (d.flags && typeof d.flags === 'object') Object.assign(this.flags, d.flags);
+      if (d.fire && typeof d.fire === 'object') this.fire = { fuel: num(d.fire.fuel, 0, 0, 1.2), lit: !!d.fire.lit };
       return d;
     } catch { return null; }
   }

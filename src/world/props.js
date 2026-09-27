@@ -4,6 +4,12 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { heightAt } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
 
+// deterministic 0..1 hash of a position (identical for coincident vertices of non-indexed geometry)
+export function posHash(x, y, z, seed = 0) {
+  const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7 + seed * 19.3) * 43758.5453;
+  return s - Math.floor(s);
+}
+
 function canvasTex(w, h, draw, srgb = true) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   draw(c.getContext('2d'), w, h);
@@ -199,9 +205,11 @@ export function buildFireRing(textures) {
     const a = (i / 11) * Math.PI * 2;
     const geo = new THREE.IcosahedronGeometry(0.2 + rnd() * 0.07, 2);
     const p = geo.attributes.position;
+    const seed = i * 7.13;
     for (let j = 0; j < p.count; j++) {
-      const k = 0.8 + rnd() * 0.35;
-      p.setXYZ(j, p.getX(j) * k, p.getY(j) * k * 0.7, p.getZ(j) * k);
+      const x = p.getX(j), y = p.getY(j), z = p.getZ(j);
+      const k = 0.8 + posHash(+x.toFixed(4), +y.toFixed(4), +z.toFixed(4), seed) * 0.35;
+      p.setXYZ(j, x * k, y * k * 0.7, z * k);
     }
     geo.computeVertexNormals();
     const m = new THREE.Mesh(geo, stoneMat);
@@ -282,7 +290,7 @@ export function buildDock(textures, length = 14) {
 export function buildLantern() {
   const g = new THREE.Group();
   const metal = new THREE.MeshStandardMaterial({ color: 0x2b3a2e, metalness: 0.8, roughness: 0.35 });
-  const glass = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transmission: 0.9, roughness: 0.05, thickness: 0.02, transparent: true, opacity: 0.35 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.05, metalness: 0, clearcoat: 1, transparent: true, opacity: 0.28, depthWrite: false });
   const flame = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 2.2, 0.8) });
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.05, 20), metal); base.position.y = 0.025;
   const glassM = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.16, 20, 1, true), glass); glassM.position.y = 0.13;

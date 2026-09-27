@@ -41,14 +41,14 @@ export class Input {
         this.autoRun = d > r * 1.35;
       }
     };
+    this.resetJoy = () => {
+      this.joyId = null; this.move.x = this.move.y = 0; this.autoRun = false;
+      knob.style.transform = 'translate(0,0)';
+      base.classList.remove('active');
+      base.style.left = ''; base.style.top = '';
+    };
     const joyEnd = (e) => {
-      for (const t of e.changedTouches) {
-        if (t.identifier !== this.joyId) continue;
-        this.joyId = null; this.move.x = this.move.y = 0; this.autoRun = false;
-        knob.style.transform = 'translate(0,0)';
-        base.classList.remove('active');
-        base.style.left = ''; base.style.top = '';
-      }
+      for (const t of e.changedTouches) if (t.identifier === this.joyId) this.resetJoy();
     };
     window.addEventListener('touchmove', joyMove, { passive: false });
     window.addEventListener('touchend', joyEnd); window.addEventListener('touchcancel', joyEnd);
@@ -83,8 +83,10 @@ export class Input {
       const el = document.getElementById(id);
       el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); on(); }, { passive: false });
       el.addEventListener('touchend', (e) => { e.preventDefault(); off?.(); }, { passive: false });
-      el.addEventListener('mousedown', (e) => { e.stopPropagation(); on(); });
-      el.addEventListener('mouseup', () => off?.());
+      el.addEventListener('touchcancel', () => off?.());
+      // primary button only (right/middle click also triggered actions)
+      el.addEventListener('mousedown', (e) => { if (e.button !== 0) return; e.stopPropagation(); on(); });
+      el.addEventListener('mouseup', (e) => { if (e.button === 0) off?.(); });
     };
     hold('btnRun', () => { this.run = !this.run; document.getElementById('btnRun').classList.toggle('on', this.run); });
     hold('btnCrouch', () => { this.crouch = !this.crouch; document.getElementById('btnCrouch').classList.toggle('on', this.crouch); });
@@ -92,26 +94,52 @@ export class Input {
     hold('btnAction', () => this.onAction?.());
 
     // ---- dev fallback (PC): WASD + mouse drag
-    window.addEventListener('keydown', (e) => { this.keys.add(e.code); if (e.code === 'KeyE' || e.code === 'Space') this.onAction?.(); });
+    const typing = (e) => /^(INPUT|SELECT|TEXTAREA)$/.test(e.target?.tagName || '');
+    window.addEventListener('keydown', (e) => {
+      if (typing(e)) return; // arrow keys on the menu sliders moved the player
+      this.keys.add(e.code);
+      // key auto-repeat fired the action ~30x/s (instantly finishing minigames / chaining actions)
+      if ((e.code === 'KeyE' || e.code === 'Space') && !e.repeat) { e.preventDefault(); this.onAction?.(); }
+    });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    let md = false, lx = 0, ly = 0;
-    lookzone.addEventListener('mousedown', (e) => { md = true; lx = e.clientX; ly = e.clientY; });
-    window.addEventListener('mouseup', () => (md = false));
-    window.addEventListener('mousemove', (e) => { if (!md) return; this.lookDelta.x += e.clientX - lx; this.lookDelta.y += e.clientY - ly; lx = e.clientX; ly = e.clientY; });
+    // keys released while unfocused never fire keyup -> the player kept walking forever
+    window.addEventListener('blur', () => this.reset());
+    let lx = 0, ly = 0;
+    this.md = false;
+    lookzone.addEventListener('mousedown', (e) => { if (e.button !== 0) return; this.md = true; lx = e.clientX; ly = e.clientY; });
+    window.addEventListener('mouseup', () => (this.md = false));
+    window.addEventListener('mousemove', (e) => {
+      if (!this.md) return;
+      if (!(e.buttons & 1)) { this.md = false; return; } // released outside the window
+      this.lookDelta.x += e.clientX - lx; this.lookDelta.y += e.clientY - ly; lx = e.clientX; ly = e.clientY;
+    });
+  }
+
+  // clear all transient input (menu, photo mode, tab hidden, game start)
+  reset() {
+    this.keys.clear();
+    this.resetJoy();
+    this.lookId = null; this.lookDelta.x = this.lookDelta.y = 0;
+    this.md = false;
   }
 
   consumeLook() {
     const k = 0.0042 * this.sens;
-    const d = { x: this.lookDelta.x * k, y: this.lookDelta.y * k };
+    const d = this._look || (this._look = { x: 0, y: 0 });
+    d.x = this.lookDelta.x * k; d.y = this.lookDelta.y * k;
     this.lookDelta.x = this.lookDelta.y = 0;
     return d;
   }
 
   getMove() {
     let x = this.move.x, y = this.move.y;
-    if (this.keys.has('KeyW')) y += 1; if (this.keys.has('KeyS')) y -= 1;
-    if (this.keys.has('KeyA')) x -= 1; if (this.keys.has('KeyD')) x += 1;
+    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) y += 1;
+    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) y -= 1;
+    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) x -= 1;
+    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) x += 1;
     const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; }
-    return { x, y, run: this.run || this.autoRun || this.keys.has('ShiftLeft') };
+    const m = this._mv || (this._mv = { x: 0, y: 0, run: false });
+    m.x = x; m.y = y; m.run = this.run || this.autoRun || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    return m;
   }
 }

@@ -10,6 +10,7 @@ const out = pos[1] || '.agents/shots/shot';
 fs.mkdirSync(out.split('/').slice(0, -1).join('/') || '.', { recursive: true });
 
 const browser = await chromium.launch({
+  headless: true,
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--renderer-process-limit=1', '--disable-extensions'],
 });
 // Pixel-class Android in landscape
@@ -28,7 +29,8 @@ await page.waitForFunction(() => window.__game && window.__game.started, null, {
 const setup = async () => page.evaluate(({ hours, p }) => {
   const g = window.__game; if (!g) return 'no game';
   if (hours) g.state.hours = parseFloat(hours);
-  if (p) { const [x, z, yaw, pitch] = p.split(',').map(Number); g.player.pos.set(x, 0, z); g.player.yaw = yaw; g.player.pitch = pitch ?? 0; }
+  // pitch ?? 0 kept NaN when omitted (split -> Number(undefined) = NaN is not nullish); teleport snaps to ground
+  if (p) { const [x, z, yaw, pitch] = p.split(',').map(Number); g.player.teleport(x, z, yaw); g.player.pitch = Number.isFinite(pitch) ? pitch : 0; }
   g.sky.envTimer = 99;
   return 'ok';
 }, { hours: args.hours, p: args.pos });
@@ -39,5 +41,6 @@ await page.screenshot({ path: `${out}.png` });
 const info = await page.evaluate(() => { const g = window.__game; if (!g) return null; const i = g.R.r.info; return { tris: i.render.triangles, calls: i.render.calls, fps: document.getElementById('fps').textContent, trees: g.world.treeCount }; });
 console.log(JSON.stringify(info));
 fs.writeFileSync(`${out}.log`, logs.join('\n'));
+if (logs.some((l) => l.startsWith('[pageerror]'))) process.exitCode = 1; // surface JS errors to the QA pipeline
 console.log(logs.filter((l) => /error|warn/i.test(l)).slice(0, 20).join('\n'));
 await browser.close();

@@ -68,19 +68,27 @@ export class Scatter {
 }
 
 export class Colliders {
+  static PAD = 0.6; // >= max query radius used by resolve()
   constructor(cell = 8) { this.cell = cell; this.map = new Map(); this.list = []; }
   key(x, z) { return Math.floor(x / this.cell) + ',' + Math.floor(z / this.cell); }
   add(x, z, r, tag) {
     const c = { x, z, r, tag };
     this.list.push(c);
-    const x0 = Math.floor((x - r) / this.cell), x1 = Math.floor((x + r) / this.cell);
-    const z0 = Math.floor((z - r) / this.cell), z1 = Math.floor((z + r) / this.cell);
+    // register with padding: resolve() only looks up the player's own cell, so a collider in the neighbouring
+    // cell was ignored and the player walked through trees / rocks sitting on a cell border
+    const pad = r + Colliders.PAD;
+    const x0 = Math.floor((x - pad) / this.cell), x1 = Math.floor((x + pad) / this.cell);
+    const z0 = Math.floor((z - pad) / this.cell), z1 = Math.floor((z + pad) / this.cell);
     for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
       const k = i + ',' + j; if (!this.map.has(k)) this.map.set(k, []); this.map.get(k).push(c);
     }
     return c;
   }
-  remove(c) { for (const arr of this.map.values()) { const i = arr.indexOf(c); if (i >= 0) arr.splice(i, 1); } }
+  remove(c) {
+    if (!c) return;
+    for (const arr of this.map.values()) { const i = arr.indexOf(c); if (i >= 0) arr.splice(i, 1); }
+    const i = this.list.indexOf(c); if (i >= 0) this.list.splice(i, 1); // list kept stale entries
+  }
   // push point out of colliders; returns corrected [x,z]
   resolve(x, z, pr = 0.35) {
     for (let it = 0; it < 2; it++) {
@@ -88,14 +96,23 @@ export class Colliders {
       if (!arr) break;
       for (const c of arr) {
         const dx = x - c.x, dz = z - c.z, d = Math.hypot(dx, dz), m = c.r + pr;
-        if (d < m && d > 1e-5) { x = c.x + (dx / d) * m; z = c.z + (dz / d) * m; }
+        if (d < m) {
+          if (d > 1e-5) { x = c.x + (dx / d) * m; z = c.z + (dz / d) * m; }
+          else x = c.x + m; // exactly at the centre: previously stayed stuck inside
+        }
       }
     }
     return [x, z];
   }
+  // query every cell overlapped by the radius (only the centre cell was checked -> trunks spawned inside trees)
   near(x, z, r) {
-    const out = []; const arr = this.map.get(this.key(x, z)) || [];
-    for (const c of arr) if (Math.hypot(x - c.x, z - c.z) < r + c.r) out.push(c);
+    const out = [], seen = new Set();
+    const x0 = Math.floor((x - r) / this.cell), x1 = Math.floor((x + r) / this.cell);
+    const z0 = Math.floor((z - r) / this.cell), z1 = Math.floor((z + r) / this.cell);
+    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
+      const arr = this.map.get(i + ',' + j); if (!arr) continue;
+      for (const c of arr) if (!seen.has(c) && Math.hypot(x - c.x, z - c.z) < r + c.r) { seen.add(c); out.push(c); }
+    }
     return out;
   }
 }

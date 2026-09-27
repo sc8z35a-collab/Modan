@@ -14,6 +14,8 @@ export function llmConfig() {
     const y = fs.readFileSync(f, 'utf8');
     key = y.match(/api_key:\s*(\S+)/)?.[1] || key;
     base = y.match(/base_url:\s*(\S+)/)?.[1] || base;
+    // strip YAML quotes ("..."/'...') that were sent verbatim in the Authorization header / URL
+    key = key?.replace(/^['"]|['"]$/g, ''); base = base?.replace(/^['"]|['"]$/g, '');
   }
   return { key, base: base?.replace(/\/$/, '') };
 }
@@ -48,7 +50,7 @@ export async function chat(messages, { models = ['gpt-5', 'gpt-5-mini'], retries
       finally { release(); }
       if (HARD.has(last.status)) return last;            // account-level: no point retrying
       if (last.status === 'http_400') break;              // bad model/params: try next model
-      await sleep(800 * 2 ** attempt + Math.random() * 400);
+      if (attempt < retries) await sleep(800 * 2 ** attempt + Math.random() * 400);
     }
   }
   return last;

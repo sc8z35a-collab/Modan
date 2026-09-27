@@ -15,6 +15,7 @@ export class Grass {
       uWind: { value: new THREE.Vector2(0.8, 0.35) },
       uNight: { value: 0 },
     };
+    this.baseDensity = Math.max(1e-3, density);
     this.layers = [];
     // near dense layer + mid layer
     this.layers.push(this.makeLayer(Math.round(260000 * density), 44, 1.0, 5));
@@ -80,7 +81,7 @@ export class Grass {
           // curvature + wind
           float gust = texture2D(tNoise, base*0.012 - uWind*uTime*0.035).r;
           float sway = sin(uTime*2.2 + base.x*0.35 + base.y*0.27 + aOff.w*6.0)*0.12 + (gust-0.35)*1.25;
-          vec2 bend = normalize(uWind) * sway + vec2(cos(ang*1.3), sin(ang*1.3)) * 0.25;
+          vec2 bend = (uWind / max(length(uWind), 1e-4)) * sway + vec2(cos(ang*1.3), sin(ang*1.3)) * 0.25;
           // player push
           vec2 dp = base - uPlayer.xz; float pd = length(dp);
           bend += normalize(dp + 1e-4) * smoothstep(1.1, 0.0, pd) * 1.4;
@@ -127,16 +128,19 @@ export class Grass {
     return mesh;
   }
 
-  update(dt, camPos, playerPos, night) {
+  update(dt, camPos, playerPos, night, wind) {
     const u = this.uniforms;
+    if (wind) u.uWind.value.copy(wind); // grass used a constant wind and ignored the world's gusts
     u.uTime.value += dt;
     u.uCam.value.copy(camPos);
     u.uPlayer.value.copy(playerPos);
     u.uNight.value = night;
   }
 
+  // d is absolute (same scale as the constructor). Buffers were sized for baseDensity, so scale relative to it
+  // (previously switching medium->high gave 0.45*0.7 = 0.315 density, i.e. LESS grass on a higher setting)
   setDensity(d) {
-    this.layers[0].geometry.instanceCount = Math.round(this.layers[0].geometry.attributes.aOff.count * d);
-    this.layers[1].geometry.instanceCount = Math.round(this.layers[1].geometry.attributes.aOff.count * d);
+    const k = Math.min(1, d / this.baseDensity);
+    for (const l of this.layers) l.geometry.instanceCount = Math.round(l.geometry.attributes.aOff.count * k);
   }
 }
