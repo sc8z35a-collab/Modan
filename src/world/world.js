@@ -8,6 +8,8 @@ import { createTreeKinds, windify } from './trees.js';
 import { mulberry32, smoothstep } from '../core/noise.js';
 import { posHash } from './props.js';
 
+// resolve assets against the deploy base (works at / and at a sub-path like /Modan/)
+const BASE = import.meta.env?.BASE_URL ?? './';
 const TEX_IDS = ['aerial_grass_rock', 'forest_ground_04', 'rocky_terrain_02', 'coast_sand_rocks_02', 'pine_bark', 'bark_brown_02', 'brown_planks_05'];
 const MODEL_IDS = ['boulder_01', 'rock_moss_set_01', 'tree_stump_01', 'dead_tree_trunk', 'fern_02', 'shrub_01', 'dry_branches_medium_01', 'namaqualand_stones_01'];
 
@@ -22,7 +24,7 @@ export async function loadAssets(renderer, onProgress, texMax = 0) {
   for (const id of TEX_IDS) {
     textures[id] = {};
     for (const k of ['diff', 'nor', 'arm']) {
-      jobs.push(tl.loadAsync(`/assets/textures/${id}/${k}.jpg`).then((t) => {
+      jobs.push(tl.loadAsync(`${BASE}assets/textures/${id}/${k}.jpg`).then((t) => {
         if (texMax && t.image.width > texMax) {
           const c = document.createElement('canvas'); c.width = c.height = texMax;
           c.getContext('2d').drawImage(t.image, 0, 0, texMax, texMax); t.image = c;
@@ -35,7 +37,7 @@ export async function loadAssets(renderer, onProgress, texMax = 0) {
   }
   const models = {};
   for (const id of MODEL_IDS) {
-    jobs.push(gl.loadAsync(`/assets/models/${id}/${id}_rt.gltf`).then((g) => { models[id] = g.scene; }));
+    jobs.push(gl.loadAsync(`${BASE}assets/models/${id}/${id}_rt.gltf`).then((g) => { models[id] = g.scene; }));
   }
   await Promise.all(jobs);
   return { textures, models };
