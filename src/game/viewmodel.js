@@ -22,23 +22,28 @@ export class ViewModel {
     for (let i = 0; i < 3; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 8), this.cookMat); m.scale.y = 0.7; m.position.z = -0.25 - i * 0.08; skMush.add(m); }
     for (const s of [skFish, skMush]) { s.position.set(0.1, -0.3, -0.35); s.rotation.set(-0.35, 0.25, 0); }
     Object.assign(this.items, { rod, axe, skewerFish: skFish, skewerMush: skMush });
+    for (const k in this.items) this.items[k].userData.rest = { r: this.items[k].rotation.clone(), p: this.items[k].position.clone() };
     for (const k in this.items) { this.items[k].visible = false; this.root.add(this.items[k]); this.items[k].traverse((o) => { if (o.isMesh) { o.castShadow = false; o.renderOrder = 30; } }); }
     this.cur = null; this.swingT = 0; this.bendV = 0; this.t = 0;
     this.tip = new THREE.Object3D(); this.tip.position.set(0, 2.45, 0); rod.add(this.tip);
   }
   set(name) {
     for (const k in this.items) this.items[k].visible = k === name;
-    this.cur = name;
+    const prev = this.items[this.cur]; // restore rest pose of the previous tool (kept a mid-swing pose)
+    if (prev && prev.userData.rest) { prev.rotation.copy(prev.userData.rest.r); prev.position.copy(prev.userData.rest.p); }
+    this.cur = name; this.swingT = 0; this.bendV = 0;
     if (name === 'skewerFish' || name === 'skewerMush') this.cookMat.color.set(name === 'skewerFish' ? 0x9aa8a0 : 0xc8b090);
   }
   swing() { this.swingT = 1; }
   bend(v) { this.bendV = v; }
   cookLevel(v) {
-    const raw = this.cur === 'skewerFish' ? new THREE.Color(0x9aa8a0) : new THREE.Color(0xc8b090);
-    const done = new THREE.Color(0xb0703a), burnt = new THREE.Color(0x1e1410);
-    this.cookMat.color.copy(v < 0.65 ? raw.lerp(done, v / 0.65) : done.lerp(burnt, Math.min(1, (v - 0.65) / 0.35)));
+    const C = this._cc || (this._cc = { fish: new THREE.Color(0x9aa8a0), mush: new THREE.Color(0xc8b090), done: new THREE.Color(0xb0703a), burnt: new THREE.Color(0x1e1410) });
+    const raw = this.cur === 'skewerFish' ? C.fish : C.mush;
+    if (v < 0.65) this.cookMat.color.lerpColors(raw, C.done, Math.max(0, v) / 0.65);
+    else this.cookMat.color.lerpColors(C.done, C.burnt, Math.min(1, (v - 0.65) / 0.35));
   }
-  tipWorld() { const v = new THREE.Vector3(); this.tip.getWorldPosition(v); return v; }
+  // rod tip in world space; camera matrix refreshed first (it was one frame stale -> line/bobber jitter)
+  tipWorld(out = new THREE.Vector3()) { this.camera.updateMatrixWorld(); this.tip.getWorldPosition(out); return out; }
   update(dt, speed) {
     this.t += dt;
     const bob = Math.sin(this.t * 7) * 0.008 * Math.min(1, speed / 3);
@@ -49,6 +54,6 @@ export class ViewModel {
     if (!it) return;
     if (this.cur === 'axe') { it.rotation.x = -0.3 - s * 1.4; it.position.y = -0.52 + s * 0.1; }
     if (this.cur === 'rod') { it.rotation.x = -0.9 - s * 0.8 + this.bendV * 0.35; it.rotation.z = -0.2 + Math.sin(this.t * 20) * 0.01 * this.bendV; }
-    this.bendV *= 0.98;
+    this.bendV *= Math.exp(-dt * 1.2); // framerate-independent
   }
 }
