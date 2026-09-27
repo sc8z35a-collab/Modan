@@ -15,6 +15,13 @@ export class AudioEngine {
     try { ctx = new AC(); } catch { return; }
     this.ctx = ctx;
     ctx.resume?.().catch(() => {});
+    // autoplay policy: a context created outside a user gesture (autostart, iOS) stays suspended.
+    // Resume on the next gesture; update()/burst() skip work while suspended so nothing piles up.
+    const unlock = () => {
+      if (ctx.state === 'running') { for (const ev of ['pointerdown', 'touchend', 'keydown']) window.removeEventListener(ev, unlock, true); return; }
+      ctx.resume?.().catch(() => {});
+    };
+    for (const ev of ['pointerdown', 'touchend', 'keydown']) window.addEventListener(ev, unlock, true);
     this.master = ctx.createGain(); this.master.gain.value = this.volume;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 3;
