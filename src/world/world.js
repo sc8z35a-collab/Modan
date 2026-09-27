@@ -6,6 +6,7 @@ import { buildTerrain, bakeWorldData, coverageAt, pathMask } from './terrain.js'
 import { Scatter, Colliders } from './scatter.js';
 import { createTreeKinds, windify } from './trees.js';
 import { mulberry32, smoothstep } from '../core/noise.js';
+import { posHash } from './props.js';
 
 const TEX_IDS = ['aerial_grass_rock', 'forest_ground_04', 'rocky_terrain_02', 'coast_sand_rocks_02', 'pine_bark', 'bark_brown_02', 'brown_planks_05'];
 const MODEL_IDS = ['boulder_01', 'rock_moss_set_01', 'tree_stump_01', 'dead_tree_trunk', 'fern_02', 'shrub_01', 'dry_branches_medium_01', 'namaqualand_stones_01'];
@@ -263,7 +264,12 @@ export class World {
         const g = new THREE.Group();
         const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 3), leafMat);
         const bp = bush.geometry.attributes.position;
-        for (let j = 0; j < bp.count; j++) { const f = 0.75 + rnd() * 0.45; bp.setXYZ(j, bp.getX(j) * f, bp.getY(j) * f * 0.8, bp.getZ(j) * f); }
+        const seed = rnd() * 100; // per-bush variation, but per-POSITION displacement (no cracks)
+        for (let j = 0; j < bp.count; j++) {
+          const x = bp.getX(j), y = bp.getY(j), z = bp.getZ(j);
+          const f = 0.75 + posHash(+x.toFixed(4), +y.toFixed(4), +z.toFixed(4), seed) * 0.45;
+          bp.setXYZ(j, x * f, y * f * 0.8, z * f);
+        }
         bush.geometry.computeVertexNormals();
         bush.position.y = 0.35; bush.castShadow = true; g.add(bush);
         const berries = new THREE.Group();

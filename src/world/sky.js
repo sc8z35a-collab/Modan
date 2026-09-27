@@ -79,7 +79,8 @@ void main(){
   float md = dot(d, uMoon);
   float disk = smoothstep(0.99955, 0.9997, md);
   if (disk > 0.0) {
-    vec3 t = normalize(cross(uMoon, vec3(0,1,0))); vec3 b = cross(t, uMoon);
+    vec3 up = abs(uMoon.y) > 0.99 ? vec3(1.0,0.0,0.0) : vec3(0.0,1.0,0.0);
+    vec3 t = normalize(cross(uMoon, up)); vec3 b = cross(t, uMoon);
     vec2 uv = vec2(dot(d,t), dot(d,b)) * 60.0;
     float maria = fbm(uv*1.4+3.0);
     col += vec3(0.95,0.95,1.0) * disk * (2.2 - maria*1.4) * uNight;

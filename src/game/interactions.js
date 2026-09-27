@@ -44,7 +44,9 @@ export class Interactions {
 
   // ---------- find nearby target
   scan() {
-    const g = this.g, p = g.player.pos, f = g.player.forward();
+    const g = this.g, p = g.player.pos, f3 = g.player.forward();
+    const fl = Math.hypot(f3.x, f3.z) || 1;
+    const f = { x: f3.x / fl, z: f3.z / fl };
     let best = null, bestScore = 1e9;
     const consider = (t, label, extraOk = true) => {
       if (!extraOk) return;

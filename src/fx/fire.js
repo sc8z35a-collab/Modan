@@ -141,6 +141,9 @@ export class Campfire {
     this.group.add(this.embers);
   }
 
+  // a few sparks from the ferro rod, even while the fire is not lit
+  sparkBurst(n = 6) { this.burst = (this.burst || 0) + n; }
+
   addFuel(v) { this.fuel = Math.min(1.2, Math.max(0, this.fuel + v)); }
   ignite() { if (this.fuel > 0.05) this.lit = true; return this.lit; }
   setPixelRatio(pr) { this.prU.value = pr; }
@@ -180,7 +183,12 @@ export class Campfire {
     const sp = this.sparks, v = this.sparkVel, L = this.sparkLife;
     for (let i = 0; i < this.sparkCount; i++) {
       if (L[i] <= 0) {
-        if (I > 0.2 && Math.random() < dt * 12 * I / this.sparkCount * 10) {
+        if (this.burst > 0) {
+          this.burst--;
+          L[i] = 0.25 + Math.random() * 0.35;
+          sp[i * 3] = (Math.random() - 0.5) * 0.3; sp[i * 3 + 1] = 0.15; sp[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+          v[i * 3] = (Math.random() - 0.5) * 2.4; v[i * 3 + 1] = 0.6 + Math.random() * 1.4; v[i * 3 + 2] = (Math.random() - 0.5) * 2.4;
+        } else if (I > 0.2 && Math.random() < dt * 12 * I / this.sparkCount * 10) {
           L[i] = 0.8 + Math.random() * 1.6;
           sp[i * 3] = (Math.random() - 0.5) * 0.4; sp[i * 3 + 1] = 0.3; sp[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
           v[i * 3] = (Math.random() - 0.5) * 0.6; v[i * 3 + 1] = 1.6 + Math.random() * 2.2; v[i * 3 + 2] = (Math.random() - 0.5) * 0.6;
