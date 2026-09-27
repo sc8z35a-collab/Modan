@@ -9,7 +9,9 @@ import { mulberry32, smoothstep } from '../core/noise.js';
 import { posHash } from './props.js';
 
 // resolve assets against the deploy base (works at / and at a sub-path like /Modan/)
-const BASE = import.meta.env?.BASE_URL ?? './';
+// VITE_ASSET_BASE lets the Pages build (tools/build-pages.mjs) load the big textures/models straight from
+// ../public/ instead of shipping a second 21MB copy
+const BASE = import.meta.env?.VITE_ASSET_BASE || import.meta.env?.BASE_URL || './';
 const TEX_IDS = ['aerial_grass_rock', 'forest_ground_04', 'rocky_terrain_02', 'coast_sand_rocks_02', 'pine_bark', 'bark_brown_02', 'brown_planks_05'];
 const MODEL_IDS = ['boulder_01', 'rock_moss_set_01', 'tree_stump_01', 'dead_tree_trunk', 'fern_02', 'shrub_01', 'dry_branches_medium_01', 'namaqualand_stones_01'];
 
