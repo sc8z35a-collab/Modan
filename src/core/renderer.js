@@ -66,7 +66,7 @@ export class Renderer {
     this.grade = new HueSaturationEffect({ saturation: 0.12, hue: 0 });
     this.bc = new BrightnessContrastEffect({ contrast: 0.06, brightness: 0.0 });
     this.vignette = new VignetteEffect({ darkness: 0.42, offset: 0.32 });
-    this.dof = new DepthOfFieldEffect(camera, { focusDistance: 0.02, focalLength: 0.05, bokehScale: 3.2, height: 540 });
+    this.dof = new DepthOfFieldEffect(camera, { focusDistance: 8, focusRange: 3, bokehScale: 3.2, resolutionY: 540 });
     this.dof.blendMode.opacity.value = 0;
     const grain = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: false });
     grain.blendMode.opacity.value = 0.05;
@@ -78,19 +78,28 @@ export class Renderer {
   }
 
   setQuality(name) {
+    if (!QUALITY[name]) return;
     this.qualityName = name;
     this.q = QUALITY[name];
     this.buildComposer();
+    // rebuilding the composer recreates the DOF effect -> restore photo mode state
+    if (this.photoMode) this.setPhotoMode(true, this.focusDist);
   }
 
+  // postprocessing 6.3x: focusDistance / focusRange are WORLD units. The old normalised values
+  // (focusDistance 0.02 / focalLength 0.05) meant "focus 2cm from the lens, 5cm range" -> photos fully blurred.
   setPhotoMode(on, focusDist = 6) {
-    this.photoMode = on;
+    this.photoMode = on; this.focusDist = focusDist;
     this.dof.blendMode.opacity.value = on ? 1 : 0;
-    if (on) this.dof.cocMaterial.worldFocusDistance = focusDist;
+    if (on) {
+      const coc = this.dof.cocMaterial;
+      coc.focusDistance = focusDist;
+      coc.focusRange = Math.max(1.2, focusDist * 0.35);
+    }
   }
 
   resize() {
-    const w = window.innerWidth, h = window.innerHeight;
+    const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight); // 0 while hidden -> NaN aspect
     const pr = Math.min(window.devicePixelRatio || 1, this.q.pixelRatio);
     this.r.setPixelRatio(pr);
     this.r.setSize(w, h, false);
@@ -101,8 +110,8 @@ export class Renderer {
     this.composer?.setSize(w, h, false);
   }
 
+  // info is reset once per frame by the caller (so the water reflection pass is counted too)
   render(dt) {
-    this.r.info.reset();
     this.composer.render(dt);
   }
 }

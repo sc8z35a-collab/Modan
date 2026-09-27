@@ -84,7 +84,7 @@ export class World {
     if (Math.hypot(x - C.x, z - C.z) < C.r + pad) return false;
     if (pathMask(x, z) > 0.05) return false;
     // dock corridor
-    if (x > -10 && x < -2 && z < -8 && z > -32) return false;
+    if (x > -12 && x < -2 && z < -8 && z > -40) return false; // dock corridor now reaches the dock's far end
     return true;
   }
 
@@ -178,7 +178,8 @@ export class World {
 
     const land = (x, z, h) => h > 0.6;
     place('boulder', 70, 240, { scale: [0.6, 2.4], sink: 0.3, collide: 1.1, filter: land, align: true });
-    place('boulder', 12, 20, { ox: -10, oz: -70 + 70, scale: [0.5, 1.2], sink: 0.2, collide: 1.1, filter: (x, z) => Math.abs(lakeDist(x, z)) < 5 });
+    // shore boulders around the dock cove (the old offset centred them on the camp ~30m from water -> 0 placed)
+    place('boulder', 12, 24, { ox: -14, oz: -40, scale: [0.5, 1.2], sink: 0.2, collide: 1.1, filter: (x, z) => Math.abs(lakeDist(x, z)) < 5 });
     place('mossrocks', 90, 180, { scale: [0.8, 1.8], sink: 0.1, collide: 0.6, filter: land, align: true });
     place('stones', 160, 120, { scale: [0.7, 1.4], filter: (x, z, h) => h > 0.1, align: true, pad: 0 });
     place('fern', Math.round(700 * this.q.grass + 150), 110, { scale: [0.8, 1.6], filter: (x, z, h) => h > 0.8 && coverageAt(x, z, h, 0)[1] > 0.4, align: true });

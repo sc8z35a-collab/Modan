@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { Renderer } from './core/renderer.js';
+import { Renderer, QUALITY } from './core/renderer.js';
 import { Input } from './core/input.js';
 import { Sky } from './world/sky.js';
 import { World, loadAssets } from './world/world.js';
 import { Water } from './world/water.js';
 import { Grass } from './world/grass.js';
-import { WORLD, heightAt } from './world/heightfield.js';
+import { WORLD, heightAt, lakeDist } from './world/heightfield.js';
 import { PATH_PTS } from './world/terrain.js';
 import * as P from './world/props.js';
 import { Campfire, Fireflies } from './fx/fire.js';
@@ -20,12 +20,21 @@ import { clamp, lerp, smoothstep } from './core/noise.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
+// localStorage can throw (private mode, storage disabled, quota) -> never let that kill the game
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
+};
+const USER_QUALITIES = ['ultra', 'high', 'medium'];
 
 class Game {
   async init() {
     const setLoad = (p, txt) => { if (params.has('snap')) console.log('[load]', p.toFixed(2), txt || '', performance.memory ? (performance.memory.usedJSHeapSize/1e6).toFixed(0)+'MB' : ''); $('loadbar').style.width = Math.round(p * 100) + '%'; if (txt) $('loadtxt').textContent = txt; };
-    const savedQ = localStorage.getItem('modan-quality') || params.get('q') || 'ultra';
-    $('optQuality').value = savedQ;
+    // URL param wins (QA harness passes ?q=qa; previously a saved menu choice silently overrode it),
+    // unknown names (old saves, typos) fall back to ultra instead of crashing on QUALITY[undefined]
+    let savedQ = params.get('q') || store.get('modan-quality') || 'ultra';
+    if (!QUALITY[savedQ]) savedQ = 'ultra';
+    if (USER_QUALITIES.includes(savedQ)) $('optQuality').value = savedQ;
     this.R = new Renderer($('gl'), savedQ);
     this.scene = this.R.scene; this.camera = this.R.camera;
     this.state = new GameState();
@@ -50,19 +59,34 @@ class Game {
     this.world.buildInteractables(this.assets.models, this.assets.textures);
     this.particles = new Particles(this.scene);
     this.fireflies = new Fireflies(this.scene, new THREE.Vector3(WORLD.camp.x - 5, 0, WORLD.camp.z - 30), 260, 55);
-    this.fireflies.setGround(heightAt);
+    // fireflies spawned over the lake sat on the lake bed (under water) -> clamp to the surface
+    this.fireflies.setGround((x, z) => Math.max(heightAt(x, z), WORLD.waterLevel));
 
     this.input = new Input();
     this.player = new Player(this.camera, this.world.colliders, this.audio, (x, z, w) => this.surfaceAt(x, z, w), this.platforms);
     this.viewmodel = new ViewModel(this.camera, this.assets.textures);
     this.ui = new UI(this);
     this.interact = new Interactions(this);
-    this.input.onAction = () => { this.audio.click(); this.interact.act(); };
+    this.input.onAction = () => {
+      // ignore actions on the title screen, while the menu is open or in photo mode
+      if (!this.started || this.paused || this.photo) return;
+      this.audio.click(); this.interact.act();
+    };
     this.input.onTap = () => { if (this.photo) this.togglePhoto(false); };
+    // body.photo hides the whole HUD (incl. the look zone), so the only exit was the tiny hint that has
+    // pointer-events:none -> photo mode could not be left on touch devices. Exit on any tap.
+    window.addEventListener('pointerup', () => { if (this.photo && performance.now() - this.photoT > 250) this.togglePhoto(false); });
 
     this.R.buildComposer();
-    this.water.resize(window.innerWidth * this.R.r.getPixelRatio(), window.innerHeight * this.R.r.getPixelRatio());
-    window.addEventListener('resize', () => this.water.resize(window.innerWidth * this.R.r.getPixelRatio(), window.innerHeight * this.R.r.getPixelRatio()));
+    const resizeFx = () => {
+      const pr = this.R.r.getPixelRatio();
+      this.water.resize(window.innerWidth * pr, window.innerHeight * pr);
+      this.fire.setPixelRatio?.(pr); this.fireflies.setPixelRatio?.(pr); this.particles.setPixelRatio?.(pr);
+    };
+    this.resizeFx = resizeFx;
+    resizeFx();
+    window.addEventListener('resize', resizeFx);
+    window.visualViewport?.addEventListener('resize', resizeFx);
 
     setLoad(0.92, 'シェーダーを準備中…');
     // warm-up: compile all materials & render a few frames
@@ -97,7 +121,7 @@ class Game {
     for (const sh of shots) {
       console.log('[snap] start', sh.name, performance.now() | 0);
       if (sh.hours !== null) this.state.hours = sh.hours;
-      if (sh.pos) { const [x, z, yaw, pitch] = sh.pos; this.player.pos.set(x, 0, z); this.player.yaw = yaw; this.player.pitch = pitch || 0; }
+      if (sh.pos) { const [x, z, yaw, pitch] = sh.pos; this.player.teleport(x, z, yaw); this.player.pitch = pitch || 0; }
       if (sh.extra.includes('fire')) { this.fire.addFuel(1); this.fire.ignite(); this.fire.intensity = 1; this.fireLogs.visible = true; }
       if (sh.extra.includes('rain')) this.rain = 1;
       this.state.timeScale = 0; this.sky.envTimer = 99; this.snapping = true; this.snapPlayer = !sh.extra.includes('title');
@@ -125,7 +149,7 @@ class Game {
     this.fireLogs.visible = false;
     this.fire = new Campfire(this.scene, new THREE.Vector3(fx, heightAt(fx, fz), fz));
     this.fire.shadowAllowed = this.R.q.shadow >= 2048;
-    this.fire.light.shadow.mapSize.setScalar(this.R.q.shadow >= 4096 ? 1024 : 512);
+    this.fire.setShadowSize(this.R.q.shadow >= 4096 ? 1024 : 512);
     this.tripod = put(P.buildTripod(), fx, fz);
     this.kettle = P.buildKettle(); this.kettle.position.set(0, 0.81, 0); this.kettle.visible = false; this.tripod.add(this.kettle);
     this.world.colliders.add(fx, fz, 0.85, 'fire');
@@ -165,13 +189,18 @@ class Game {
     this.buildStringLights(new THREE.Vector3(poleA[0], heightAt(...poleA) + 2.4, poleA[1]), new THREE.Vector3(poleB[0], heightAt(...poleB) + 2.4, poleB[1]));
 
     // dock at end of path
-    const [ex, ez] = PATH_PTS[PATH_PTS.length - 1];
+    // start the deck where the terrain drops to deck height (the first ~5m used to be buried in the hillside,
+    // and the player could not walk onto the dock because the step up from the terrain was blocked)
+    const [px0, pz0] = PATH_PTS[PATH_PTS.length - 1];
+    const ddx = -Math.sin(0.12), ddz = -Math.cos(0.12);
+    let ds = 0; while (ds < 12 && heightAt(px0 + ddx * ds, pz0 + ddz * ds) > 0.62) ds += 0.1;
+    const ex = px0 + ddx * ds, ez = pz0 + ddz * ds;
     const dockLen = 16;
     const dock = P.buildDock(tx, dockLen);
     dock.position.set(ex, 0.55, ez); dock.rotation.y = 0.12;
     this.scene.add(dock);
     this.dock = dock;
-    const dir = new THREE.Vector3(-Math.sin(0.12), 0, -Math.cos(0.12));
+    const dir = new THREE.Vector3(ddx, 0, ddz);
     this.dockEnd = new THREE.Vector3(ex, 0.55, ez).addScaledVector(dir, dockLen - 1.2);
     const inv = new THREE.Matrix4();
     dock.updateMatrixWorld(); inv.copy(dock.matrixWorld).invert();
@@ -181,17 +210,14 @@ class Game {
       contains: (x, z) => { v.set(x, 0.55, z).applyMatrix4(inv); return Math.abs(v.x) < 1.0 && v.z < 0.3 && v.z > -dockLen; },
     }];
     // rowboat moored at dock
-    this.boat = this.buildBoat(); this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, -0.45, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
+    this.boat = this.buildBoat(); this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, 0, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
+    this.boatBaseY = WORLD.waterLevel + 0.02; // the bob animation overwrote the initial -0.45 offset anyway
   }
 
   buildBoat() {
     const g = new THREE.Group();
     const wood = new THREE.MeshStandardMaterial({ map: this.assets.textures.brown_planks_05.diff, color: 0x6b8fa0, roughness: 0.7, side: THREE.DoubleSide });
-    const pts = []; for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push(new THREE.Vector2(0.75 * Math.sin(t * Math.PI / 2) + 0.05, -0.35 + t * 0.55)); }
-    const hull = new THREE.LatheGeometry(pts, 32, 0, Math.PI);
-    hull.rotateZ(Math.PI / 2); hull.rotateY(Math.PI / 2);
-    hull.scale(1, 1, 1);
-    const p = hull.attributes.position; for (let i = 0; i < p.count; i++) { const z = p.getZ(i); p.setZ(i, z); p.setX(i, p.getX(i) * 3.2); }
+    // (an unused LatheGeometry hull used to be built and discarded here)
     const shell = new THREE.SphereGeometry(1, 32, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2.3);
     shell.scale(0.8, 0.45, 2.2);
     const m = new THREE.Mesh(shell, wood); m.castShadow = true; g.add(m);
@@ -224,39 +250,50 @@ class Game {
   setupMenus() {
     $('btnStart').onclick = () => this.start(false);
     $('btnContinue').onclick = () => this.start(true);
-    $('btnMenu').onclick = () => { this.audio.click(); $('menu').classList.remove('hidden'); this.paused = true; };
-    $('btnResume').onclick = () => { $('menu').classList.add('hidden'); this.paused = false; this.applyOptions(); };
-    $('btnSave').onclick = () => { this.saveGame(); this.ui.toast('💾 セーブしました'); };
+    $('btnMenu').onclick = () => { if (this.photo) return; this.audio.click(); $('menu').classList.remove('hidden'); this.paused = true; this.input.reset(); };
+    $('btnResume').onclick = () => { $('menu').classList.add('hidden'); this.paused = false; this.input.reset(); this.applyOptions(); };
+    $('btnSave').onclick = () => { const ok = this.saveGame(); this.ui.toast(ok ? '💾 セーブしました' : '⚠ セーブできませんでした'); };
     $('btnPhoto').onclick = () => this.togglePhoto(true);
-    $('photoHint').onclick = () => this.togglePhoto(false);
-    const sens = localStorage.getItem('modan-sens'); if (sens) $('optSens').value = sens;
-    const vol = localStorage.getItem('modan-vol'); if (vol) $('optVol').value = vol;
-    $('optFps').checked = params.has('fps') || localStorage.getItem('modan-fps') === '1';
+    const sens = store.get('modan-sens'); if (sens && Number.isFinite(+sens)) $('optSens').value = sens;
+    const vol = store.get('modan-vol'); if (vol && Number.isFinite(+vol)) $('optVol').value = vol;
+    // the time-speed option was never persisted
+    const tsc = store.get('modan-time'); if (tsc && [...$('optTime').options].some((o) => o.value === tsc)) $('optTime').value = tsc;
+    $('optFps').checked = params.has('fps') || store.get('modan-fps') === '1';
     this.applyOptions(true);
   }
 
   applyOptions(first = false) {
     const q = $('optQuality').value;
-    localStorage.setItem('modan-quality', q);
-    if (!first && q !== this.R.qualityName) {
-      this.R.setQuality(q);
-      this.sky.setShadowMapSize(this.R.q.shadow);
-      this.grass.setDensity(this.R.q.grass / 1.0);
-      this.water.rtScale = this.R.q.water;
-      this.water.resize(window.innerWidth * this.R.r.getPixelRatio(), window.innerHeight * this.R.r.getPixelRatio());
+    // only persist real user choices; with ?q=qa the select showed "ultra" and applyOptions(true) wrote
+    // "ultra" to storage, so the next normal visit silently switched quality
+    if (USER_QUALITIES.includes(q)) {
+      if (!first) store.set('modan-quality', q);
+      if (!first && q !== this.R.qualityName) {
+        this.R.setQuality(q);
+        this.sky.setShadowMapSize(this.R.q.shadow);
+        this.grass.setDensity(this.R.q.grass);
+        this.water.rtScale = this.R.q.water;
+        this.fire.shadowAllowed = this.R.q.shadow >= 2048;
+        this.fire.setShadowSize(this.R.q.shadow >= 4096 ? 1024 : 512);
+        this.resizeFx();
+      }
     }
-    this.state.timeScale = parseFloat($('optTime').value);
-    this.input.sens = parseFloat($('optSens').value); localStorage.setItem('modan-sens', $('optSens').value);
-    this.audio.setVolume(parseFloat($('optVol').value)); localStorage.setItem('modan-vol', $('optVol').value);
-    this.showFps = $('optFps').checked; localStorage.setItem('modan-fps', this.showFps ? '1' : '0');
+    const num = (v, d) => (Number.isFinite(parseFloat(v)) ? parseFloat(v) : d);
+    this.state.timeScale = num($('optTime').value, 1); if (!first) store.set('modan-time', $('optTime').value);
+    this.input.sens = num($('optSens').value, 1.2); store.set('modan-sens', $('optSens').value);
+    this.audio.setVolume(num($('optVol').value, 0.8)); store.set('modan-vol', $('optVol').value);
+    this.showFps = $('optFps').checked; store.set('modan-fps', this.showFps ? '1' : '0');
     $('fps').classList.toggle('hidden', !this.showFps);
   }
 
   async start(cont) {
+    // double-tapping start/continue ran this twice (save loaded over a running game, listeners stacked)
+    if (this.starting || this.started) return;
+    this.starting = true;
     this.audio.init();
     this.audio.setVolume(parseFloat($('optVol').value));
-    // fullscreen + landscape lock (mobile)
-    await this.enterFullscreen();
+    // fullscreen + landscape lock (mobile); lock() may never settle on some browsers -> don't hang the start
+    await Promise.race([this.enterFullscreen(), new Promise((r) => setTimeout(r, 1500))]);
     // re-enter fullscreen on the next touch if the user swiped it away (Android back gesture / notification shade)
     document.addEventListener('fullscreenchange', () => {
       if (!document.fullscreenElement && this.started) window.addEventListener('touchend', () => this.enterFullscreen(), { once: true });
@@ -264,17 +301,26 @@ class Game {
     this.requestWakeLock();
     if (cont) {
       const d = this.state.load();
-      if (d?.player) { this.player.pos.set(d.player.x, 0, d.player.z); this.player.yaw = d.player.yaw; }
-      if (d?.fire) { this.fire.fuel = d.fire.fuel; this.fire.lit = d.fire.lit; if (d.fire.fuel > 0) this.fireLogs.visible = true; }
+      const pl = d?.player;
+      if (pl && Number.isFinite(pl.x) && Number.isFinite(pl.z)) this.player.teleport(pl.x, pl.z, pl.yaw);
+      const fs = this.state.fire; // validated by state.load()
+      this.fire.fuel = fs.fuel; this.fire.lit = fs.lit && fs.fuel > 0;
+      if (this.fire.fuel > 0) this.fireLogs.visible = true;
       this.ui.lastQuest = -1;
-    }
+    } else this.player.teleport(this.player.pos.x, this.player.pos.z);
+    this.input.reset();
     $('title').classList.add('hidden');
     $('hud').classList.remove('hidden');
     this.started = true;
     this.ui.refresh();
     this.ui.toast(cont ? 'おかえりなさい' : '湖畔の森へようこそ。まずは薪を集めよう');
     this.saveTimer = 0;
-    document.addEventListener('visibilitychange', () => { if (document.hidden) { this.saveGame(); this.audio.ctx?.suspend(); } else { this.audio.ctx?.resume(); this.requestWakeLock(); } });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { this.saveGame(); this.audio.ctx?.suspend(); this.input.reset(); }
+      else { this.audio.ctx?.resume(); this.requestWakeLock(); }
+    });
+    window.addEventListener('pagehide', () => this.saveGame());
+    this.starting = false;
   }
 
   async enterFullscreen() {
@@ -286,31 +332,44 @@ class Game {
 
   // keep the screen awake while camping (the phone would otherwise dim during idle fire-watching)
   async requestWakeLock() {
+    if (document.hidden || (this.wakeLock && !this.wakeLock.released)) return;
     try { this.wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* denied */ }
   }
 
   saveGame() {
+    if (!this.started) return false; // never overwrite a real save with the untouched title-screen state
     this.state.fire = { fuel: this.fire.fuel, lit: this.fire.lit };
-    this.state.save({ player: { x: this.player.pos.x, z: this.player.pos.z, yaw: this.player.yaw } });
+    return this.state.save({ player: { x: this.player.pos.x, z: this.player.pos.z, yaw: this.player.yaw } });
   }
 
   togglePhoto(on) {
-    this.photo = on;
+    if (!!this.photo === on) return;
+    if (on && (!this.started || this.paused)) return;
+    this.photo = on; this.photoT = performance.now();
+    this.input.reset();
     document.body.classList.toggle('photo', on);
     $('photoHint').classList.toggle('hidden', !on);
     this.viewmodel.root.visible = !on;
     // focus on whatever is in the center
     let fd = 8;
     if (on) {
+      // terrain/water: march the analytic heightfield (a brute-force raycast against the ~400k-triangle terrain
+      // stalled the frame for tens of ms, and water was ignored); props: normal raycast on small meshes
       const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(0, 0), this.camera); rc.far = 200;
-      const hit = rc.intersectObjects([this.world.terrain, this.tent, this.fireRing], true)[0];
-      if (hit) fd = hit.distance;
+      const o = rc.ray.origin, d = rc.ray.direction;
+      for (let t = 0.5; t < 200; t += Math.max(0.25, t * 0.02)) {
+        const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t;
+        if (y <= Math.max(heightAt(x, z), WORLD.waterLevel)) { fd = t; break; }
+      }
+      const hit = rc.intersectObjects([this.tent, this.fireRing, this.dock, this.boat], true)[0];
+      if (hit && hit.distance < fd) fd = hit.distance;
       const f = document.createElement('div'); f.id = 'flash'; document.body.appendChild(f);
       requestAnimationFrame(() => { f.style.opacity = 0.8; setTimeout(() => { f.style.opacity = 0; setTimeout(() => f.remove(), 500); }, 80); });
       this.audio.tone(2400, 0.05, 0.12, 'square', 0.5, 0, 0); this.audio.burst(3000, 1, 0.2, 0.08);
       // night sky photo quest
       const dir = new THREE.Vector3(); this.camera.getWorldDirection(dir);
-      if (this.sky.info.night > 0.7 && dir.y > 0.25) { this.state.flags.nightPhoto = true; setTimeout(() => this.ui.toast('🌌 満天の星空を撮影した！'), 600); }
+      if (this.sky.info.night > 0.7 && dir.y > 0.25 && (this.rain || 0) < 0.3) { this.state.flags.nightPhoto = true; setTimeout(() => this.ui.toast('🌌 満天の星空を撮影した！'), 600); }
+      else if (this.sky.info.night > 0.7 && dir.y > 0.25) setTimeout(() => this.ui.toast('雲で星が見えない…雨が止むのを待とう'), 600);
       else if (this.sky.info.night > 0.7) setTimeout(() => this.ui.toast('ヒント：空を見上げて撮ろう'), 600);
     }
     this.R.setPhotoMode(on, fd);
@@ -321,7 +380,9 @@ class Game {
   loop(t) {
     requestAnimationFrame((tt) => this.loop(tt));
     if (this.snapping) return;
+    // rAF timestamps can be older than performance.now() taken in init -> negative dt ran time backwards
     let dt = (t - this.last) / 1000; this.last = t;
+    if (!(dt > 0)) dt = 0;
     dt = Math.min(dt, 1 / 20);
     this.frame(dt);
     if (this.showFps) {
@@ -335,6 +396,7 @@ class Game {
   }
 
   frame(dt, warm = false) {
+    this.R.r.info.reset(); // once per frame, so the reflection pass is included in the stats
     if (this.paused && !warm) { this.R.render(dt); return; }
     const s = this.state;
     // time of day
@@ -354,7 +416,9 @@ class Game {
     // morning mist
     this.fogMorning = Math.max(0, (this.fogMorning || 0) - dt * 0.004);
     const mist = smoothstep(4.5, 6.5, s.hours) * (1 - smoothstep(7.5, 10, s.hours));
-    this.scene.fog.density += mist * 0.012 + this.rain * 0.004;
+    // fogMorning (set after sleeping) was decayed every frame but never actually applied
+    this.scene.fog.density += mist * 0.012 + this.rain * 0.004 + this.fogMorning * 0.006;
+    this.sky.uniforms.uCloud.value = 0.35 + this.rain * 0.55; // overcast while raining
 
     // player & camera
     if ((this.started || this.snapPlayer) && !this.photo) this.player.update(dt, this.input);
@@ -376,10 +440,12 @@ class Game {
       const cold = night * 0.6 + this.rain * 0.4 + (this.player.inWater > 0.1 ? 1 : 0);
       s.warmth = clamp(s.warmth + (nearFire * 0.5 - cold * 0.08 - 0.01) * gm, 0, 1);
       s.hunger = clamp(s.hunger - 0.03 * gm, 0, 1);
-      s.energy = clamp(s.energy - (0.025 + (this.input.getMove().run ? 0.04 : 0)) * gm, 0, 1);
+      // the run toggle alone (standing still) used to drain energy
+      const running = Math.hypot(this.player.vel.x, this.player.vel.z) > 3.2;
+      s.energy = clamp(s.energy - (0.025 + (running ? 0.04 : 0)) * gm, 0, 1);
       this.player.speedMul = 0.6 + 0.4 * smoothstep(0, 0.25, Math.min(s.energy, s.hunger));
       // berries regrow
-      for (const pk of this.world.pickups) if (pk.type === 'berry' && pk.regrow > 0) { pk.regrow -= dt; if (pk.regrow <= 0) pk.berries.visible = true; }
+      for (const pk of this.world.pickups) if (pk.type === 'berry' && pk.regrow > 0) { pk.regrow -= dt; if (pk.regrow <= 0) { pk.regrow = 0; pk.berries.visible = true; } }
       if (s.advanceQuests((q) => this.ui.questDone(q))) this.ui.refresh();
       this.uiT = (this.uiT || 0) + dt;
       if (this.uiT > 0.5) { this.uiT = 0; this.ui.refresh(); }
@@ -388,7 +454,7 @@ class Game {
 
     // world systems
     this.world.update(dt, this.camera);
-    this.grass.update(dt, this.camera.position, this.player.pos, night);
+    this.grass.update(dt, this.camera.position, this.player.pos, night, this.world.U.uWind.value);
     this.fire.update(dt, this.world.U.uWind.value, this.rain);
     this.fireLogs.userData.charred && (this.fireLogs.userData.charred.emissiveIntensity = this.fire.intensity * 2.5);
     if (this.fire.fuel <= 0.01 && !this.fire.lit) this.fireLogs.visible = false;
@@ -400,8 +466,9 @@ class Game {
 
     // lanterns & string lights come on at dusk
     const lampOn = smoothstep(0.1, 0.6, night + sk.dusk * 0.4);
+    const flick = 2.2 + Math.sin(performance.now() * 0.013) * 0.08;
     for (const l of this.lanterns) {
-      l.userData.light.intensity = lampOn * (2.2 + Math.sin(performance.now() * 0.013) * 0.08);
+      l.userData.light.intensity = lampOn * flick;
       l.userData.flame.visible = lampOn > 0.05;
     }
     this.stringLight.intensity = lampOn * 3;
@@ -409,7 +476,7 @@ class Game {
     this.tent.userData.light.intensity = lampOn * 1.2;
     this.world.U.uTentGlow.value = lampOn * 0.5;
     // boat bob
-    if (this.boat) { const bt = performance.now() * 0.001; this.boat.position.y = -0.02 + Math.sin(bt * 1.1) * 0.03; this.boat.rotation.z = Math.sin(bt * 0.9) * 0.03; this.boat.rotation.x = Math.sin(bt * 0.7) * 0.02; }
+    if (this.boat) { const bt = performance.now() * 0.001; this.boat.position.y = this.boatBaseY + Math.sin(bt * 1.1) * 0.03; this.boat.rotation.z = Math.sin(bt * 0.9) * 0.03; this.boat.rotation.x = Math.sin(bt * 0.7) * 0.02; }
 
     // tone/exposure grading by time of day
     this.R.bloom.intensity = 0.9 + night * 0.9;
@@ -423,21 +490,18 @@ class Game {
       this.audio.update(dt, {
         night, rain: this.rain, fireLevel: this.fire.intensity,
         fireDist: Math.hypot(pp.x - this.fire.position.x, pp.z - this.fire.position.z),
-        waterDist: Math.max(0, lakeDistApprox(pp.x, pp.z)),
+        waterDist: Math.max(0, lakeDist(pp.x, pp.z)),
       });
     }
 
     // render
-    this.reflT = (this.reflT || 0) + 1;
     if (!params.has('norefl')) this.water.renderReflection([this.grass.layers[0], this.grass.layers[1], this.particles.rain, this.viewmodel.root]);
     if (params.has('nocomposer')) this.R.r.render(this.scene, this.camera); else this.R.render(dt);
   }
 }
 
-import { lakeDist } from './world/heightfield.js';
-const lakeDistApprox = (x, z) => lakeDist(x, z);
-
 new Game().init().catch((e) => {
   console.error(e);
-  $('loadtxt').textContent = 'エラー: ' + e.message;
+  $('loading').classList.remove('hidden');
+  $('loadtxt').textContent = 'エラー: ' + (e?.message || e) + ' — ページを再読み込みしてください';
 });

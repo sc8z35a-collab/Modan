@@ -8,9 +8,13 @@ export class AudioEngine {
   }
 
   init() {
-    if (this.ctx) { this.ctx.resume(); return; }
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.ctx) { this.ctx.resume?.().catch(() => {}); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return; // no WebAudio -> play silently instead of throwing on start
+    let ctx;
+    try { ctx = new AC(); } catch { return; }
     this.ctx = ctx;
+    ctx.resume?.().catch(() => {});
     this.master = ctx.createGain(); this.master.gain.value = this.volume;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 3;
@@ -38,7 +42,10 @@ export class AudioEngine {
     this.enabled = true;
   }
 
-  setVolume(v) { this.volume = v; if (this.master) this.master.gain.value = v; }
+  setVolume(v) {
+    this.volume = Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0.8));
+    if (this.master) this.master.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.02); // no click
+  }
 
   makeNoise(sec, type) {
     const ctx = this.ctx, n = ctx.sampleRate * sec, b = ctx.createBuffer(2, n, ctx.sampleRate);
@@ -95,6 +102,9 @@ export class AudioEngine {
   }
 
   env(g, t, a, peak, d) {
+    // exponentialRampToValueAtTime throws RangeError for 0 / negative / non-finite values
+    // (e.g. fire crackle at fv=0 or volume-scaled peaks) -> that exception broke the whole frame loop
+    peak = Number.isFinite(peak) ? Math.max(peak, 0.0002) : 0.0002;
     g.gain.cancelScheduledValues(t);
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(peak, t + a);
@@ -104,18 +114,21 @@ export class AudioEngine {
   burst(freq, q, peak, dur, type = 'bandpass', pan = 0, rev = 0.2, buf) {
     if (!this.enabled) return;
     const ctx = this.ctx, t = ctx.currentTime;
+    if (ctx.state !== 'running') return; // don't pile up nodes while suspended (tab hidden)
     const s = ctx.createBufferSource(); s.buffer = buf || this.noiseBuf;
     const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
     const g = ctx.createGain(); const p = ctx.createStereoPanner(); p.pan.value = pan;
     s.connect(f).connect(g).connect(p).connect(this.master);
     if (rev) { const rg = ctx.createGain(); rg.gain.value = rev; p.connect(rg).connect(this.revSend); }
     this.env(g, t, 0.004, peak, dur);
-    s.start(t, Math.random() * 3, dur + 0.1);
+    s.start(t, Math.random() * Math.max(0, s.buffer.duration - dur - 0.2), dur + 0.1);
+    s.onended = () => s.disconnect(); // release the node graph
   }
 
   tone(freq, dur, peak = 0.2, type = 'sine', slide = 0, pan = 0, rev = 0.3) {
     if (!this.enabled) return;
     const ctx = this.ctx, t = ctx.currentTime;
+    if (ctx.state !== 'running') return;
     const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t);
     if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
     const g = ctx.createGain(); const p = ctx.createStereoPanner(); p.pan.value = pan;
@@ -123,6 +136,7 @@ export class AudioEngine {
     if (rev) { const rg = ctx.createGain(); rg.gain.value = rev; p.connect(rg).connect(this.revSend); }
     this.env(g, t, 0.01, peak, dur);
     o.start(t); o.stop(t + dur + 0.05);
+    o.onended = () => o.disconnect();
   }
 
   footstep(surface = 'grass', run = false) {
@@ -157,7 +171,7 @@ export class AudioEngine {
   loon() { const pan = Math.random() * 2 - 1; this.tone(620, 1.4, 0.05, 'sine', 1.35, pan, 0.9); setTimeout(() => this.tone(840, 1.2, 0.04, 'sine', 0.8, pan, 0.9), 1400); }
 
   update(dt, s) {
-    if (!this.enabled) return;
+    if (!this.enabled || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime, k = 0.25;
     const windAmt = 0.05 + 0.04 * Math.sin(t * 0.13) + 0.03 * Math.sin(t * 0.41);
     this.wind.g.gain.setTargetAtTime(windAmt * (1 + s.rain), t, k);

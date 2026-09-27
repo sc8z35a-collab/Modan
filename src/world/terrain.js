@@ -29,7 +29,8 @@ export function coverageAt(x, z, h, slope) {
 }
 
 // winding footpath from camp down to the dock
-export const PATH_PTS = [[6, 12], [2, 2], [-4, -8], [-6, -14]];
+// last point extends down to the shoreline so the path actually meets the dock
+export const PATH_PTS = [[6, 12], [2, 2], [-4, -8], [-6, -14], [-6.6, -19.2]];
 export function pathMask(x, z) {
   let d = 1e9;
   for (let i = 0; i < PATH_PTS.length - 1; i++) {

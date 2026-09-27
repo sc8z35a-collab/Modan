@@ -74,6 +74,9 @@ export class Campfire {
     this.intensity = 0;  // smoothed visual
     this.glintColor = new THREE.Color(0, 0, 0);
     this.time = 0;
+    this.smoulder = 0;
+    this.prU = { value: Math.min(window.devicePixelRatio || 1, 2) };
+    this._wind = new THREE.Vector2(0.6, 0.3);
 
     // flame billboards
     const N = 7;
@@ -94,6 +97,7 @@ export class Campfire {
     this.light = new THREE.PointLight(0xff8a3a, 0, 22, 1.6);
     this.light.position.set(0, 0.9, 0);
     this.light.castShadow = true;
+    this.shadowAllowed = true;
     this.light.shadow.mapSize.set(1024, 1024);
     this.light.shadow.bias = -0.002; this.light.shadow.normalBias = 0.05;
     this.light.shadow.camera.near = 0.3; this.light.shadow.camera.far = 24;
@@ -112,8 +116,10 @@ export class Campfire {
     sg.setAttribute('aLife', new THREE.BufferAttribute(this.sparkLife, 1));
     this.sparkMesh = new THREE.Points(sg, new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { uTex: { value: makeSoftTexture() } },
-      vertexShader: `attribute float aLife; varying float vL; void main(){ vL=aLife; vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = (6.0 + aLife*8.0) * (6.0 / -mv.z) * ${Math.min(window.devicePixelRatio, 2).toFixed(1)}; gl_Position = projectionMatrix*mv; }`,
+      uniforms: { uTex: { value: makeSoftTexture() }, uPR: this.prU },
+      // point size follows the renderer pixel ratio (was baked from devicePixelRatio, wrong on medium/high quality)
+      // and is clamped (points at/behind the camera produced negative or huge sizes)
+      vertexShader: `attribute float aLife; uniform float uPR; varying float vL; void main(){ vL=aLife; vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = clamp((6.0 + aLife*8.0) * (6.0 / max(-mv.z, 0.05)) * uPR, 0.0, 128.0); gl_Position = projectionMatrix*mv; }`,
       fragmentShader: `uniform sampler2D uTex; varying float vL; void main(){ float a = texture2D(uTex, gl_PointCoord).a * smoothstep(0.0,0.3,vL); if(vL<=0.0) discard; gl_FragColor = vec4(vec3(1.0,0.55,0.15)*6.0*a, a); }`,
     }));
     this.sparkMesh.frustumCulled = false;
@@ -135,10 +141,17 @@ export class Campfire {
     this.group.add(this.embers);
   }
 
-  addFuel(v) { this.fuel = Math.min(1.2, this.fuel + v); }
+  addFuel(v) { this.fuel = Math.min(1.2, Math.max(0, this.fuel + v)); }
   ignite() { if (this.fuel > 0.05) this.lit = true; return this.lit; }
+  setPixelRatio(pr) { this.prU.value = pr; }
+  // resizing mapSize has no effect once the shadow map exists -> dispose it so it is recreated
+  setShadowSize(s) {
+    const sh = this.light.shadow;
+    if (sh.mapSize.x === s) return;
+    sh.mapSize.set(s, s); sh.map?.dispose(); sh.map = null;
+  }
 
-  update(dt, wind = new THREE.Vector2(0.6, 0.3), rain = 0) {
+  update(dt, wind = this._wind, rain = 0) {
     this.time += dt;
     if (this.lit) {
       this.fuel -= dt * (1 / 600) * (1 + rain * 2); // ~10 min real time per full load
@@ -155,7 +168,10 @@ export class Campfire {
     this.light.position.x = Math.sin(this.time * 9.1) * 0.05;
     this.light.position.z = Math.cos(this.time * 7.7) * 0.05;
     this.fill.intensity = I * 10 * flick;
-    this.light.castShadow = I > 0.05 && this.shadowAllowed !== false;
+    // toggling castShadow changes the shadow-light count -> EVERY lit material recompiles (hitch whenever the
+    // fire is lit / dies). Keep it constant and just stop re-rendering the cube shadow map while unlit.
+    if (this.light.castShadow !== !!this.shadowAllowed) this.light.castShadow = !!this.shadowAllowed;
+    this.light.shadow.autoUpdate = I > 0.05;
     this.glintColor.setRGB(1.0, 0.5, 0.15).multiplyScalar(I * flick);
     const emb = Math.max(I, this.lit ? 0 : Math.min(0.25, this.fuel) * 0.5);
     this.embers.material.color.setRGB(1.0 * emb * 2.2, 0.28 * emb * 2.2, 0.04 * emb);
@@ -199,7 +215,7 @@ export class Campfire {
       u.rot += dt * 0.2; s.material.rotation = u.rot;
       s.material.opacity = (u.a || 0) * Math.sin(Math.PI * Math.min(1, t * 1.2)) * 0.32;
     }
-    this.smoulder = Math.max(0, (this.smoulder || 0) - dt * 0.05);
+    this.smoulder = Math.max(0, this.smoulder - dt * 0.05);
   }
 }
 
@@ -216,18 +232,16 @@ export class Fireflies {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
-    this.u = { uTime: { value: 0 }, uAmt: { value: 0 }, uTex: { value: makeSoftTexture() }, uH: { value: 0 } };
-    this.base = pos.slice();
-    this.heights = new Float32Array(count);
+    this.u = { uTime: { value: 0 }, uAmt: { value: 0 }, uTex: { value: makeSoftTexture() }, uPR: { value: Math.min(window.devicePixelRatio || 1, 2) } };
     this.mesh = new THREE.Points(g, new THREE.ShaderMaterial({
       uniforms: this.u, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      vertexShader: `attribute float aSeed; uniform float uTime; varying float vA;
+      vertexShader: `attribute float aSeed; uniform float uTime; uniform float uPR; varying float vA;
         void main(){ vec3 p = position;
           float t = uTime*0.35 + aSeed*40.0;
           p += vec3(sin(t*1.3)*1.6, 0.9 + sin(t*0.9)*0.6 + aSeed*1.2, cos(t*1.1)*1.6);
           vec4 mv = modelViewMatrix*vec4(p,1.0);
           vA = pow(max(sin(uTime*(1.2+aSeed) + aSeed*30.0),0.0), 3.0);
-          gl_PointSize = 18.0 * (4.0 / -mv.z) * ${Math.min(window.devicePixelRatio, 2).toFixed(1)};
+          gl_PointSize = clamp(18.0 * (4.0 / max(-mv.z, 0.05)) * uPR, 0.0, 128.0);
           gl_Position = projectionMatrix*mv; }`,
       fragmentShader: `uniform sampler2D uTex; uniform float uAmt; varying float vA;
         void main(){ float a = texture2D(uTex, gl_PointCoord).a * vA * uAmt; gl_FragColor = vec4(vec3(0.75,1.0,0.3)*5.0*a, a); }`,
@@ -240,5 +254,6 @@ export class Fireflies {
     for (let i = 0; i < this.count; i++) p.setY(i, fn(p.getX(i), p.getZ(i)));
     p.needsUpdate = true;
   }
+  setPixelRatio(pr) { this.u.uPR.value = pr; }
   update(dt, night) { this.u.uTime.value += dt; this.u.uAmt.value = night; this.mesh.visible = night > 0.02; }
 }
