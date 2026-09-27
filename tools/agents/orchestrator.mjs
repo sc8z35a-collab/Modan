@@ -24,7 +24,8 @@ import path from 'path';
 import { execSync, spawn } from 'child_process';
 import { chat, apiHealth } from './lib/llm.mjs';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+import { fileURLToPath } from 'url';
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = path.join(ROOT, '.agents');
 fs.mkdirSync(OUT, { recursive: true });
 const argv = process.argv.slice(2);
@@ -50,7 +51,7 @@ async function llmReview(agent, instruction, files, extra = '') {
   ], { models: ['gpt-5', 'gpt-5-mini'], json: true });
   if (!r.ok) return { mode: 'local', api: r.status };
   let findings = [];
-  try { findings = JSON.parse(r.text.replace(/^```json|```$/g, '')).findings || []; } catch { findings = [{ severity: 'low', title: 'unparsed review', detail: r.text.slice(0, 600) }]; }
+  try { findings = JSON.parse(r.text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')).findings || []; } catch { findings = [{ severity: 'low', title: 'unparsed review', detail: r.text.slice(0, 600) }]; }
   return { mode: 'llm', api: 'ok', model: r.model, findings };
 }
 
@@ -88,6 +89,7 @@ const agents = {
       });
     }
     const dir = path.join(ROOT, 'dist/assets');
+    if (!fs.existsSync(dir)) return { pass: false, issues: ['dist/assets missing — run without --skip-build'], findings, info: {} };
     const js = fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
     const kb = js.reduce((s, f) => s + fs.statSync(path.join(dir, f)).size, 0) / 1024;
     if (kb > 1600) issues.push(`JS bundle ${kb.toFixed(0)}KB > 1600KB budget`);
@@ -111,7 +113,8 @@ const agents = {
 
   async 'shader-agent'() {
     const issues = [], findings = [];
-    const files = sh('grep -rl "onBeforeCompile\\|ShaderMaterial" src').trim().split('\n');
+    let files = [];
+    try { files = sh('grep -rl "onBeforeCompile\\|ShaderMaterial" src').trim().split('\n').filter(Boolean); } catch { /* none */ }
     for (const f of files) {
       const s = read(f);
       for (const m of s.matchAll(/replace\(\s*'#include <([a-z_]+)>'/g)) {
@@ -132,7 +135,7 @@ const agents = {
   async 'perf-agent'() {
     const issues = [], info = {}, findings = [];
     const r = read('src/core/renderer.js');
-    const ultra = r.match(/ultra: \{([^}]*)\}/)[1];
+    const ultra = r.match(/ultra: \{([^}]*)\}/)?.[1] || '';
     info.ultra = ultra.trim();
     if (!/shadow: 4096/.test(ultra)) issues.push('ultra profile should use 4096 shadow map on flagship phones');
     const grass = read('src/world/grass.js');
@@ -142,7 +145,9 @@ const agents = {
     const w = read('src/world/world.js');
     info.treeAttempts = +w.match(/Math\.round\((\d+) \* this\.q\.trees\)/)?.[1];
     if (/_1k\.gltf/.test(w)) issues.push('world.js loads full-res _1k models; use decimated _rt models');
-    const lights = sh('grep -rhoc "new THREE.PointLight" src').trim().split('\n').reduce((a, b) => a + +b, 0);
+    // -c with -o still counts LINES and -h drops names; count matches instead
+    let lights = 0;
+    try { lights = sh('grep -rho "new THREE.PointLight" src').trim().split('\n').filter(Boolean).length; } catch { /* none */ }
     info.pointLights = lights;
     if (lights > 12) findings.push({ severity: 'medium', title: 'point lights', detail: `${lights} PointLights: every forward-lit material pays for all of them; pool or cull by distance` });
     const shots = path.join(OUT, 'shots');
@@ -278,7 +283,17 @@ async function runAll() {
 
 if (flag('watch')) {
   let timer = null, running = false;
-  const trigger = () => { clearTimeout(timer); timer = setTimeout(async () => { if (running) return trigger(); running = true; await runAll(); running = false; }, 1500); };
+  let pending = false;
+  const trigger = () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (running) { pending = true; return; }
+      running = true;
+      try { await runAll(); } catch (e) { console.error(e); }
+      running = false;
+      if (pending) { pending = false; trigger(); }
+    }, 1500);
+  };
   await runAll();
   fs.watch(path.join(ROOT, 'src'), { recursive: true }, trigger);
   console.log('watching src/ …');
