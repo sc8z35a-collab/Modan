@@ -34,7 +34,10 @@ class Game {
     // unknown names (old saves, typos) fall back to ultra instead of crashing on QUALITY[undefined]
     let savedQ = params.get('q') || store.get('modan-quality') || 'ultra';
     if (!QUALITY[savedQ]) savedQ = 'ultra';
-    if (USER_QUALITIES.includes(savedQ)) $('optQuality').value = savedQ;
+    // non-menu profiles (qa) get a temporary option, otherwise the select showed "ultra" and closing the
+    // menu silently switched the renderer to ultra
+    if (!USER_QUALITIES.includes(savedQ)) { const o = document.createElement('option'); o.value = o.textContent = savedQ; $('optQuality').appendChild(o); }
+    $('optQuality').value = savedQ;
     this.R = new Renderer($('gl'), savedQ);
     this.scene = this.R.scene; this.camera = this.R.camera;
     this.state = new GameState();
@@ -266,17 +269,15 @@ class Game {
     const q = $('optQuality').value;
     // only persist real user choices; with ?q=qa the select showed "ultra" and applyOptions(true) wrote
     // "ultra" to storage, so the next normal visit silently switched quality
-    if (USER_QUALITIES.includes(q)) {
-      if (!first) store.set('modan-quality', q);
-      if (!first && q !== this.R.qualityName) {
-        this.R.setQuality(q);
-        this.sky.setShadowMapSize(this.R.q.shadow);
-        this.grass.setDensity(this.R.q.grass);
-        this.water.rtScale = this.R.q.water;
-        this.fire.shadowAllowed = this.R.q.shadow >= 2048;
-        this.fire.setShadowSize(this.R.q.shadow >= 4096 ? 1024 : 512);
-        this.resizeFx();
-      }
+    if (!first && q !== this.R.qualityName && QUALITY[q]) {
+      if (USER_QUALITIES.includes(q)) store.set('modan-quality', q);
+      this.R.setQuality(q);
+      this.sky.setShadowMapSize(this.R.q.shadow);
+      this.grass.setDensity(this.R.q.grass);
+      this.water.rtScale = this.R.q.water;
+      this.fire.shadowAllowed = this.R.q.shadow >= 2048;
+      this.fire.setShadowSize(this.R.q.shadow >= 4096 ? 1024 : 512);
+      this.resizeFx();
     }
     const num = (v, d) => (Number.isFinite(parseFloat(v)) ? parseFloat(v) : d);
     this.state.timeScale = num($('optTime').value, 1); if (!first) store.set('modan-time', $('optTime').value);
