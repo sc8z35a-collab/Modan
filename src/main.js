@@ -345,7 +345,7 @@ class Game {
 
   togglePhoto(on) {
     if (!!this.photo === on) return;
-    if (on && (!this.started || this.paused)) return;
+    if (on && (!this.started || this.paused || this.interact.mode || this.interact.busy)) return; // not during minigames / sleep
     this.photo = on; this.photoT = performance.now();
     this.input.reset();
     document.body.classList.toggle('photo', on);

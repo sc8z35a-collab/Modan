@@ -75,7 +75,7 @@ export class Interactions {
     else if (g.fire.lit && g.state.inv.mushroom > 0) consider(fireT, 'キノコを焼く');
     else if (g.fire.lit && !g.state.flags.coffeeToday && !this.brewing) consider(fireT, 'コーヒーを淹れる');
     else if (wood > 0 && g.fire.fuel < 1.1) consider(fireT, `薪をくべる (${wood})`);
-    else consider(fireT, 'くつろぐ');
+    else if (g.fire.lit) consider(fireT, 'くつろぐ'); // was offered at a cold, empty fire pit too
     // tent
     consider({ type: 'tent', pos: g.tentPos, radius: 2.8 }, g.state.hours >= 19 || g.state.hours < 5 ? 'テントで眠る' : 'テントで休む');
     // dock end = fishing
@@ -239,14 +239,15 @@ export class Interactions {
   startCook(kind) {
     const g = this.g;
     const name = kind === 'fish' ? '魚' : 'キノコ';
-    g.state.add(kind, -1);
+    // the item is only consumed when it comes off the fire (it used to be removed up-front, so an autosave /
+    // pagehide during the minigame lost it for good)
     g.viewmodel.set(kind === 'fish' ? 'skewerFish' : 'skewerMush');
     this.open(`<div class="mg-title">${name}を焼く</div><div class="cook"><div class="cz raw">生</div><div class="cz good">ちょうど良い</div><div class="cz burnt">焦げ</div><div class="cneedle"></div></div><div class="mg-hint">「ちょうど良い」で火から上げよう</div>`, {
       lock: true, v: 0,
       update: (dt) => {
         const m = this.mode;
         // fire went out while cooking -> give the food back instead of cooking over nothing
-        if (!g.fire.lit && g.fire.intensity < 0.05) { g.ui.toast('火が消えてしまった…'); g.state.add(kind, 1); this.close(); g.ui.refresh(); return; }
+        if (!g.fire.lit && g.fire.intensity < 0.05) { g.ui.toast('火が消えてしまった…'); this.close(); g.ui.refresh(); return; }
         m.v += dt * 0.1 * (0.6 + g.fire.intensity);
         this.mg.querySelector('.cneedle').style.left = Math.min(100, m.v * 100) + '%';
         g.viewmodel.cookLevel(m.v);
@@ -256,11 +257,12 @@ export class Interactions {
       tap: () => {
         if (!this.mode) return;
         const v = this.mode.v;
+        if (v > 0.55) g.state.add(kind, -1);
         if (v > 0.55 && v < 0.8) {
           if (kind === 'fish') { g.state.add('cooked', 1); g.ui.toast('🍢 完璧な焼き加減！'); }
           else { g.state.hunger = Math.min(1, g.state.hunger + 0.2); g.ui.toast('🍄 香ばしいキノコを食べた'); }
           g.audio.success();
-        } else if (v <= 0.55) { g.ui.toast('まだ生焼けだ…もう少し'); g.state.add(kind, 1); }
+        } else if (v <= 0.55) { g.ui.toast('まだ生焼けだ…もう少し'); }
         else { g.ui.toast('焦げてしまった…'); g.state.hunger = Math.min(1, g.state.hunger + 0.05); }
         this.close(); g.ui.refresh();
       },
