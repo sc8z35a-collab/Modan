@@ -72,12 +72,12 @@ export class Interactions {
     if (!g.fire.lit && g.fire.fuel > 0.05) consider(fireT, '火をつける');
     else if (wood > 0 && g.fire.fuel < 0.35) consider(fireT, `薪をくべる (${wood})`);
     else if (g.fire.lit && g.state.inv.fish > 0) consider(fireT, '魚を焼く');
-    else if (g.fire.lit && g.state.inv.mushroom > 0) consider(fireT, 'キノコを焼く');
-    else if (g.fire.lit && !g.state.flags.coffeeToday && !this.brewing) consider(fireT, 'コーヒーを淹れる');
-    else if (wood > 0 && g.fire.fuel < 1.1) consider(fireT, `薪をくべる (${wood})`);
     // the fire target (2.6m) always won, so right after cooking the quest's "eat it" action could not appear
     // until the player walked away from the fire
     else if (g.state.inv.cooked > 0 && g.state.hunger < 0.95) consider({ type: 'eat', pos: fp, radius: 2.6 }, '焼き魚を食べる');
+    else if (g.fire.lit && g.state.inv.mushroom > 0) consider(fireT, 'キノコを焼く');
+    else if (g.fire.lit && !g.state.flags.coffeeToday && !this.brewing) consider(fireT, 'コーヒーを淹れる');
+    else if (wood > 0 && g.fire.fuel < 1.1) consider(fireT, `薪をくべる (${wood})`);
     else if (g.fire.lit) consider(fireT, 'くつろぐ'); // was offered at a cold, empty fire pit too
     // tent
     consider({ type: 'tent', pos: g.tentPos, radius: 2.8 }, g.state.hours >= 19 || g.state.hours < 5 ? 'テントで眠る' : 'テントで休む');
@@ -124,6 +124,7 @@ export class Interactions {
       case 'mushroom': {
         const r = t.ref; const i = g.world.pickups.indexOf(r); if (i < 0) break;
         r.obj.visible = false; g.scene.remove(r.obj);
+        r.obj.traverse((o) => o.geometry?.dispose()); // every respawn builds 6 new geometries -> free the old ones
         g.world.pickups.splice(i, 1);
         s.add('mushroom', 1); a.pickup(); g.ui.toast(`${ITEMS.mushroom.icon} キノコ +1`);
         setTimeout(() => g.world.spawnMushroom(), 120000);
@@ -287,7 +288,7 @@ export class Interactions {
   tickBrew(dt) {
     if (!this.brewing) return;
     const g = this.g;
-    this.brewing -= dt;
+    if (g.fire.lit) this.brewing -= dt; // the kettle kept "boiling" after the fire went out
     if (this.brewing > 0) return;
     this.brewing = 0;
     g.kettle.visible = false;
