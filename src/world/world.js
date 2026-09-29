@@ -259,6 +259,9 @@ export class World {
     // berry bushes (re-harvestable)
     const leafMat = new THREE.MeshStandardMaterial({ color: 0x2c4a1c, roughness: 0.8 });
     const berryMat = new THREE.MeshPhysicalMaterial({ color: 0x3a1a5a, roughness: 0.25, clearcoat: 0.8 });
+    // one shared geometry + one InstancedMesh per bush (was 26 separate meshes/geometries per bush = 312 draw
+    // calls, x2 with shadows, for the 12 bushes)
+    const berryGeo = new THREE.SphereGeometry(0.03, 8, 6), bm4 = new THREE.Matrix4();
     for (let i = 0; i < 12; i++) {
       for (let k = 0; k < 40; k++) {
         const a = rnd() * Math.PI * 2, rr = 14 + rnd() * 60;
@@ -276,12 +279,12 @@ export class World {
         }
         bush.geometry.computeVertexNormals();
         bush.position.y = 0.35; bush.castShadow = true; g.add(bush);
-        const berries = new THREE.Group();
+        const berries = new THREE.InstancedMesh(berryGeo, berryMat, 26);
         for (let b = 0; b < 26; b++) {
           const v = new THREE.Vector3(rnd() - 0.5, rnd() * 0.6, rnd() - 0.5).normalize().multiplyScalar(0.48);
-          const bm = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), berryMat);
-          bm.position.set(v.x, 0.35 + v.y * 0.8, v.z); berries.add(bm);
+          berries.setMatrixAt(b, bm4.makeTranslation(v.x, 0.35 + v.y * 0.8, v.z));
         }
+        berries.computeBoundingSphere();
         g.add(berries);
         g.position.set(x, h, z);
         this.scene.add(g);
@@ -304,7 +307,10 @@ export class World {
         g.position.set(x, h - 0.05, z); g.rotation.y = rnd() * 6.28;
         this.scene.add(g);
         const box = new THREE.Box3().setFromObject(g);
-        const col = this.colliders.add(x, z, 0.5, 'trunk');
+        // the log is ~3m long along its local X axis: one 0.5m circle at the centre let the player walk
+        // straight through both ends -> a chain of circles along the log
+        const ry = g.rotation.y, ax = Math.cos(ry), az = -Math.sin(ry);
+        const col = [-1.2, -0.6, 0, 0.6, 1.2].map((o) => this.colliders.add(x + ax * o, z + az * o, 0.35, 'trunk'));
         this.choppables.push({ type: 'trunk', obj: g, pos: g.position, label: '倒木を割る', radius: 2.6, hp: 5, col, size: box.getSize(new THREE.Vector3()) });
         break;
       }

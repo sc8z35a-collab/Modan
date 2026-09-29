@@ -37,7 +37,8 @@ const setup = async () => page.evaluate(({ hours, p }) => {
 console.log('setup', await setup());
 if (args.fire) await page.evaluate(() => { const g = window.__game; g.fire.addFuel(1); g.fire.ignite(); g.fire.intensity = 1; g.fireLogs.visible = true; });
 await page.waitForTimeout(+(args.wait || 6000));
-await page.screenshot({ path: `${out}.png` });
+// SwiftShader frames take many seconds: the default 30s screenshot timeout failed in the sandbox
+await page.screenshot({ path: `${out}.png`, timeout: 300000 });
 const info = await page.evaluate(() => { const g = window.__game; if (!g) return null; const i = g.R.r.info; return { tris: i.render.triangles, calls: i.render.calls, fps: document.getElementById('fps').textContent, trees: g.world.treeCount }; });
 console.log(JSON.stringify(info));
 fs.writeFileSync(`${out}.log`, logs.join('\n'));

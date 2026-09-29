@@ -1,0 +1,11 @@
+import { chromium } from 'playwright';
+import fs from 'fs';
+const browser = await chromium.launch({ headless: true, args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--disable-dev-shm-usage','--renderer-process-limit=1'] });
+const ctx = await browser.newContext({ viewport: { width: 915, height: 412 }, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+await page.goto('http://localhost:4173/?q=qa&autostart=1&norefl&nocomposer' + (process.argv[3] || ''), { timeout: 120000 });
+await page.waitForFunction(() => window.__game && window.__game.started, null, { timeout: 300000, polling: 1000 });
+const code = fs.readFileSync(process.argv[2], 'utf8');
+console.log(JSON.stringify(await page.evaluate(code), null, 1));
+await browser.close();

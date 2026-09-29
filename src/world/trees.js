@@ -286,7 +286,8 @@ export function createTreeKinds(textures, U, quality = 1) {
     variants.push({ name: 'pine' + v, radius: 0.42, lods: [
       { dist: 60, parts: [{ geo: trunk0, mat: barkMat, castShadow: true }, { geo: fol0, mat: pineMat, castShadow: true }] },
       { dist: 150, parts: [{ geo: trunk1, mat: barkMat, castShadow: true }, { geo: fol1, mat: pineMat, castShadow: true }] },
-      { dist: Infinity, parts: [{ geo: trunk1, mat: farMat }, { geo: blob, mat: farMat }] },
+      // far pine trunks used the green foliage material
+      { dist: Infinity, parts: [{ geo: trunk1, mat: barkMat }, { geo: blob, mat: farMat }] },
     ] });
   }
   // birches

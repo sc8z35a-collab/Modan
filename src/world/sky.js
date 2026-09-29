@@ -207,7 +207,8 @@ export class Sky {
     this.sunDir.copy(ldir);
     if (useMoon) {
       this.sun.color.setRGB(0.55, 0.66, 1.0);
-      this.sun.intensity = 0.42 * smoothstep(-0.02, 0.25, moon.y);
+      // fade in from 0 right after the switch (it jumped 0.04 -> 0.39 in one frame at dusk / dawn)
+      this.sun.intensity = 0.42 * smoothstep(-0.02, 0.25, moon.y) * smoothstep(-0.04, -0.16, sunH);
     } else {
       this.sun.color.copy(sunCol);
       this.sun.intensity = 3.6 * smoothstep(-0.04, 0.18, sunH);

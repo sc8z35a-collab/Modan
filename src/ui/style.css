@@ -18,10 +18,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #050806; col
 .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 50; }
 #loading { background: radial-gradient(ellipse at 50% 60%, #16241c 0%, #050806 70%); z-index: 60; }
 .load-inner, .title-inner { text-align: center; }
-.logo { font-size: 7vh; letter-spacing: 0.35em; font-weight: 200; }
+/* letter-spacing also trails the last glyph -> logo / subtitle sat visibly right of centre */
+.logo { font-size: 7vh; letter-spacing: 0.35em; font-weight: 200; text-indent: 0.35em; }
 .logo span { font-weight: 700; margin-left: 0.3em; color: var(--accent); }
 .logo.big { font-size: 13vh; text-shadow: 0 4px 40px rgba(0,0,0,0.6); }
-.sub { opacity: 0.8; letter-spacing: 0.3em; font-size: 2.6vh; margin: 1.5vh 0 4vh; }
+.sub { opacity: 0.8; letter-spacing: 0.3em; text-indent: 0.3em; font-size: 2.6vh; margin: 1.5vh 0 4vh; }
 .bar { width: 42vw; height: 3px; background: rgba(255,255,255,0.12); margin: 0 auto; border-radius: 3px; overflow: hidden; }
 .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #f0b35a, #ffdca0); transition: width .25s; }
 .loadtxt { margin-top: 2vh; font-size: 2.2vh; opacity: 0.7; }
@@ -80,17 +81,21 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #050806; col
 #joybase.active { opacity: 1; transition: none; }
 #joyknob { position: absolute; left: 50%; top: 50%; width: 7.5vh; height: 7.5vh; margin: -3.75vh; border-radius: 50%; background: rgba(255,255,255,0.55); box-shadow: 0 2px 12px rgba(0,0,0,0.4); }
 #lookzone { position: absolute; right: 0; top: 0; width: 58vw; height: 100%; }
+/* #lookzone comes later in the DOM than #topright/#actions and covered the menu + photo buttons
+   (elementFromPoint on both returned #lookzone -> neither button could be pressed) */
 #hud #lookzone { z-index: 0; }
+#topright, #actions, #joyzone { z-index: 2; }
 
 #actions { position: absolute; right: calc(3vh + var(--safe-r)); bottom: calc(4vh + var(--safe-b)); width: 34vh; height: 30vh; pointer-events: none; }
 #actions > * { pointer-events: auto; }
-.act { position: absolute; right: 0; bottom: 0; min-width: 16vh; height: 16vh; border-radius: 8vh; padding: 0 3vh; border: 2px solid rgba(255,220,160,0.7); background: radial-gradient(circle at 50% 35%, rgba(255,190,110,0.55), rgba(120,70,20,0.55)); color: #fff; font: inherit; font-size: 2.6vh; font-weight: 700; backdrop-filter: blur(8px); box-shadow: 0 0 24px rgba(255,170,80,0.35); animation: actin .25s ease; }
+.act { position: absolute; right: 0; bottom: 0; min-width: 16vh; max-width: 17vh; line-height: 1.15; overflow-wrap: anywhere; height: 16vh; border-radius: 8vh; padding: 0 3vh; border: 2px solid rgba(255,220,160,0.7); background: radial-gradient(circle at 50% 35%, rgba(255,190,110,0.55), rgba(120,70,20,0.55)); color: #fff; font: inherit; font-size: 2.6vh; font-weight: 700; backdrop-filter: blur(8px); box-shadow: 0 0 24px rgba(255,170,80,0.35); animation: actin .25s ease; }
 .act:active { transform: scale(0.94); }
 @keyframes actin { from { transform: scale(0.6); opacity: 0; } }
 .round { position: absolute; width: 8.5vh; height: 8.5vh; border-radius: 50%; background: var(--glass); border: 1px solid var(--line); color: var(--txt); font: inherit; font-size: 2.4vh; backdrop-filter: blur(10px); }
 .round.on { background: rgba(240,179,90,0.55); border-color: var(--accent); }
-#btnRun { right: 19vh; bottom: 1vh; }
-#btnCrouch { right: 19vh; bottom: 11vh; }
+/* long labels ("薪をくべる (12)") widened the action button over run/crouch: now capped at 17vh */
+#btnRun { right: 19.5vh; bottom: 1vh; }
+#btnCrouch { right: 19.5vh; bottom: 11vh; }
 
 #minigame { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); width: 44vw; background: rgba(10,14,12,0.55); border: 1px solid var(--line); border-radius: 2vh; padding: 1.6vh 2.4vh; text-align: center; backdrop-filter: blur(12px); pointer-events: none; }
 .mg-title { font-weight: 700; color: var(--accent); font-size: 2.4vh; margin-bottom: 1vh; }
@@ -127,8 +132,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #050806; col
 .credits { font-size: 1.5vh; opacity: 0.5; margin-top: 1.5vh; text-align: right; }
 
 #photoHint { position: fixed; bottom: 3vh; left: 50%; transform: translateX(-50%); z-index: 20; font-size: 2vh; opacity: 0.8; background: var(--glass); padding: 0.8vh 2vh; border-radius: 999px; pointer-events: none; }
-body.photo #hud { display: none; }
-#fps { position: fixed; right: calc(2vh + var(--safe-r)); bottom: 1vh; z-index: 30; font: 1.6vh monospace; opacity: 0.8; pointer-events: none; background: rgba(0,0,0,0.4); padding: 0.3vh 0.8vh; border-radius: 0.6vh; white-space: pre; text-align: right; }
+/* photo mode hid the whole HUD including the look zone, so the advertised free look was impossible;
+   keep only the look zone (drag = look, tap = exit) */
+body.photo #hud > :not(#lookzone) { display: none !important; }
+/* was bottom-right, underneath the action button */
+#fps { position: fixed; right: calc(2.2vh + var(--safe-r)); top: calc(10vh + var(--safe-t)); z-index: 30; font: 1.6vh monospace; opacity: 0.8; pointer-events: none; background: rgba(0,0,0,0.4); padding: 0.3vh 0.8vh; border-radius: 0.6vh; white-space: pre; text-align: right; }
 #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 1.2s ease; z-index: 45; }
 #fade.on { opacity: 1; }
 #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 46; transition: opacity .4s; }

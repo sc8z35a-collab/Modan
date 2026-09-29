@@ -105,6 +105,10 @@ function tentMaterial(U, colorHex, glowMul, flutter, seam) {
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += mix(diffuseColor.rgb, vec3(0.9,0.75,0.5), 0.5) * vec3(1.0,0.66,0.32) * uGlow * ${glowMul.toFixed(2)};`);
   };
+  // three.js keys programs by onBeforeCompile.toString(), which is identical for both tent materials (the
+  // flutter / glow numbers are closure values) -> the fly silently reused the inner tent's program
+  // (glow x1.5, flutter 0.004). Make the key depend on the baked constants.
+  mat.customProgramCacheKey = () => `tent:${flutter.toFixed(4)}:${glowMul.toFixed(2)}`;
   return mat;
 }
 
@@ -276,8 +280,9 @@ export function buildDock(textures, length = 14) {
   deck.castShadow = deck.receiveShadow = true;
   g.add(deck);
   for (let i = 0; i <= length / 2.2; i++) for (const s of [-1, 1]) {
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 3, 10), postMat);
-    p.position.set(s * (w / 2 - 0.05), -1.3, -i * 2.2); p.castShadow = true; g.add(p);
+    // 3m posts ended at -2.25m while the lakebed under the far end is ~-3.8m: they hung in the water
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 5, 10), postMat);
+    p.position.set(s * (w / 2 - 0.05), -2.3, -i * 2.2); p.castShadow = true; g.add(p);
   }
   // side beams
   for (const s of [-1, 1]) {

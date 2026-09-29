@@ -75,6 +75,7 @@ export class Campfire {
     this.glintColor = new THREE.Color(0, 0, 0);
     this.time = 0;
     this.smoulder = 0;
+    this.heat = 0;       // residual heat of the bed (embers only glow after the fire has actually burned)
     this.prU = { value: Math.min(window.devicePixelRatio || 1, 2) };
     this._wind = new THREE.Vector2(0.6, 0.3);
 
@@ -176,7 +177,9 @@ export class Campfire {
     if (this.light.castShadow !== !!this.shadowAllowed) this.light.castShadow = !!this.shadowAllowed;
     this.light.shadow.autoUpdate = I > 0.05;
     this.glintColor.setRGB(1.0, 0.5, 0.15).multiplyScalar(I * flick);
-    const emb = Math.max(I, this.lit ? 0 : Math.min(0.25, this.fuel) * 0.5);
+    this.heat = this.lit ? 1 : Math.max(0, this.heat - dt / 180);
+    // freshly stacked, never-lit wood used to glow like embers
+    const emb = Math.max(I, this.lit ? 0 : Math.min(0.25, this.fuel) * 0.5 * this.heat);
     this.embers.material.color.setRGB(1.0 * emb * 2.2, 0.28 * emb * 2.2, 0.04 * emb);
 
     // sparks
@@ -222,6 +225,7 @@ export class Campfire {
       s.scale.set(sc, sc, sc);
       u.rot += dt * 0.2; s.material.rotation = u.rot;
       s.material.opacity = (u.a || 0) * Math.sin(Math.PI * Math.min(1, t * 1.2)) * 0.32;
+      s.visible = s.material.opacity > 0.002; // 26 sorted transparent sprites were drawn every frame at opacity 0
     }
     this.smoulder = Math.max(0, this.smoulder - dt * 0.05);
   }
