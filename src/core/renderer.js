@@ -71,7 +71,12 @@ export class Renderer {
     const grain = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: false });
     grain.blendMode.opacity.value = 0.05;
 
-    const effects = [this.dof, this.bloom, this.tone, this.grade, this.bc, this.vignette, grain];
+    // EffectPass calls update() on every effect each frame even at opacity 0: the DOF effect ran its CoC + blur
+    // + 4 bokeh passes every frame while only photo mode uses it. It gets its own pass, enabled in photo mode.
+    this.dofPass = new EffectPass(camera, this.dof);
+    this.dofPass.enabled = this.photoMode;
+    composer.addPass(this.dofPass);
+    const effects = [this.bloom, this.tone, this.grade, this.bc, this.vignette, grain];
     composer.addPass(new EffectPass(camera, ...effects));
     if (q.smaa) composer.addPass(new EffectPass(camera, new SMAAEffect({ preset: SMAAPreset.HIGH })));
     this.resize();
@@ -91,6 +96,7 @@ export class Renderer {
   setPhotoMode(on, focusDist = 6) {
     this.photoMode = on; this.focusDist = focusDist;
     this.dof.blendMode.opacity.value = on ? 1 : 0;
+    if (this.dofPass) this.dofPass.enabled = on;
     if (on) {
       const coc = this.dof.cocMaterial;
       coc.focusDistance = focusDist;
