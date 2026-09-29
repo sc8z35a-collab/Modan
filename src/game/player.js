@@ -36,14 +36,14 @@ export class Player {
     this._grounded = false;
   }
 
-  update(dt, input) {
+  update(dt, input, lookOnly = false) {
     const look = input.consumeLook();
     if (!this.locked) {
       this.yaw -= look.x; this.pitch = clamp(this.pitch - look.y, -1.35, 1.25);
       // keep yaw bounded so it doesn't lose float precision after hours of looking around
       if (this.yaw > Math.PI * 4 || this.yaw < -Math.PI * 4) this.yaw %= Math.PI * 2;
     }
-    const mv = this.locked ? NO_MOVE : input.getMove();
+    const mv = this.locked || lookOnly ? NO_MOVE : input.getMove();
     const crouch = input.crouch;
     // standing on the dock is NOT wading, even though the terrain below it is under water
     const onDock = !!this.onPlatform(this.pos.x, this.pos.z);

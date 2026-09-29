@@ -75,6 +75,9 @@ export class Interactions {
     else if (g.fire.lit && g.state.inv.mushroom > 0) consider(fireT, 'キノコを焼く');
     else if (g.fire.lit && !g.state.flags.coffeeToday && !this.brewing) consider(fireT, 'コーヒーを淹れる');
     else if (wood > 0 && g.fire.fuel < 1.1) consider(fireT, `薪をくべる (${wood})`);
+    // the fire target (2.6m) always won, so right after cooking the quest's "eat it" action could not appear
+    // until the player walked away from the fire
+    else if (g.state.inv.cooked > 0 && g.state.hunger < 0.95) consider({ type: 'eat', pos: fp, radius: 2.6 }, '焼き魚を食べる');
     else if (g.fire.lit) consider(fireT, 'くつろぐ'); // was offered at a cold, empty fire pit too
     // tent
     consider({ type: 'tent', pos: g.tentPos, radius: 2.8 }, g.state.hours >= 19 || g.state.hours < 5 ? 'テントで眠る' : 'テントで休む');

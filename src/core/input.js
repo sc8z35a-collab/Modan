@@ -106,8 +106,13 @@ export class Input {
     window.addEventListener('blur', () => this.reset());
     let lx = 0, ly = 0;
     this.md = false;
-    lookzone.addEventListener('mousedown', (e) => { if (e.button !== 0) return; this.md = true; lx = e.clientX; ly = e.clientY; });
-    window.addEventListener('mouseup', () => (this.md = false));
+    let mdStart = null;
+    lookzone.addEventListener('mousedown', (e) => { if (e.button !== 0) return; this.md = true; lx = e.clientX; ly = e.clientY; mdStart = { x: lx, y: ly, t: performance.now() }; });
+    window.addEventListener('mouseup', (e) => {
+      // short click without drag = tap (mouse had no tap at all, only touch did)
+      if (this.md && mdStart && e.button === 0 && performance.now() - mdStart.t < 250 && Math.hypot(e.clientX - mdStart.x, e.clientY - mdStart.y) < 6) this.onTap?.(e.clientX, e.clientY);
+      this.md = false; mdStart = null;
+    });
     window.addEventListener('mousemove', (e) => {
       if (!this.md) return;
       if (!(e.buttons & 1)) { this.md = false; return; } // released outside the window

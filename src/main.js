@@ -75,10 +75,11 @@ class Game {
       if (!this.started || this.paused || this.photo) return;
       this.audio.click(); this.interact.act();
     };
-    this.input.onTap = () => { if (this.photo) this.togglePhoto(false); };
+    this.input.onTap = () => { if (this.photo && performance.now() - this.photoT > 250) this.togglePhoto(false); };
     // body.photo hides the whole HUD (incl. the look zone), so the only exit was the tiny hint that has
     // pointer-events:none -> photo mode could not be left on touch devices. Exit on any tap.
-    window.addEventListener('pointerup', () => { if (this.photo && performance.now() - this.photoT > 250) this.togglePhoto(false); });
+    // (the look zone now stays active in photo mode: drag looks around, a short tap exits via onTap. The old
+    // window-wide pointerup exit also fired at the end of every look drag.)
 
     this.R.buildComposer();
     const resizeFx = () => {
@@ -170,6 +171,7 @@ class Game {
     this.world.colliders.add(chair.position.x, chair.position.z, 0.35, 'chair');
     // wood pile
     this.woodpile = put(P.buildWoodPile(tx), C.x - 3.5, C.z - 2.2, 0.6);
+    this.world.colliders.add(C.x - 3.5, C.z - 2.2, 0.45, 'woodpile'); // player walked through the stack
     // lanterns
     this.lanterns = [];
     const l1 = put(P.buildLantern(), C.x - 4.4, C.z + 5.8); this.lanterns.push(l1);
@@ -292,7 +294,7 @@ class Game {
     this.state.timeScale = num($('optTime').value, 1); if (!first) store.set('modan-time', $('optTime').value);
     this.input.sens = num($('optSens').value, 1.2); store.set('modan-sens', $('optSens').value);
     this.audio.setVolume(num($('optVol').value, 0.8)); store.set('modan-vol', $('optVol').value);
-    this.showFps = $('optFps').checked; store.set('modan-fps', this.showFps ? '1' : '0');
+    this.showFps = $('optFps').checked; if (!(first && params.has('fps'))) store.set('modan-fps', this.showFps ? '1' : '0'); // ?fps (QA) stuck forever
     $('fps').classList.toggle('hidden', !this.showFps);
   }
 
@@ -438,7 +440,7 @@ class Game {
       const C = WORLD.camp, a = this.titleCam + 2.2;
       this.camera.position.set(C.x + Math.cos(a) * 11, heightAt(C.x, C.z) + 2.6, C.z + Math.sin(a) * 11);
       this.camera.lookAt(C.x - 3, heightAt(C.x, C.z) + 1.0, C.z);
-    } else if (this.photo) this.player.update(dt, this.input); // free look while in photo mode
+    } else if (this.photo) this.player.update(dt, this.input, true); // free look (no walking) in photo mode
     if (this.shakeAmt > 0) { this.camera.position.x += (Math.random() - 0.5) * this.shakeAmt * 0.05; this.camera.position.y += (Math.random() - 0.5) * this.shakeAmt * 0.05; this.shakeAmt -= dt * 2; }
 
     // survival stats
