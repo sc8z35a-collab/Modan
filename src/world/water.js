@@ -48,6 +48,10 @@ export class Water {
     this._t = new THREE.Vector3(); this._look = new THREE.Vector3();
     this._plane = new THREE.Plane(); this._cp = new THREE.Vector4(); this._q = new THREE.Vector4();
     this._up = new THREE.Vector3(0, 1, 0);
+    // bounds of the actual lake (lakeDist shape: radius up to ~1.4r in x, /1.25 in z) for reflection culling
+    const L0 = WORLD.lake, rx = L0.r * 1.45, rz = rx / 1.25;
+    this._lakeBox = new THREE.Box3(new THREE.Vector3(L0.x - rx, WORLD.waterLevel - 0.5, L0.z - rz), new THREE.Vector3(L0.x + rx, WORLD.waterLevel + 0.5, L0.z + rz));
+    this._frustum = new THREE.Frustum(); this._pv = new THREE.Matrix4();
 
     this.uniforms = {
       uTime: { value: 0 },
@@ -175,6 +179,11 @@ export class Water {
     const cam = this.camera, m = this.mirrorCam, r = this.renderer;
     const wl = WORLD.waterLevel;
     if (cam.position.y < wl) return;
+    // the mirrored scene (trees, terrain, props, shadows off) was rendered every frame even when the lake was
+    // completely off-screen (e.g. facing the forest at camp): skip it when the lake is outside the frustum
+    cam.updateMatrixWorld();
+    this._pv.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    if (!this._frustum.setFromProjectionMatrix(this._pv).intersectsBox(this._lakeBox)) return;
     // NOTE: non-recursive copy. Object3D.copy() is recursive by default, which cloned the camera's children
     // (the first-person viewmodel: rod, axe, skewers...) into the mirror camera EVERY frame -> unbounded leak.
     m.copy(cam, false);

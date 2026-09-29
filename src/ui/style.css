@@ -18,10 +18,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #050806; col
 .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 50; }
 #loading { background: radial-gradient(ellipse at 50% 60%, #16241c 0%, #050806 70%); z-index: 60; }
 .load-inner, .title-inner { text-align: center; }
-.logo { font-size: 7vh; letter-spacing: 0.35em; font-weight: 200; }
+/* letter-spacing also trails the last glyph -> logo / subtitle sat visibly right of centre */
+.logo { font-size: 7vh; letter-spacing: 0.35em; font-weight: 200; text-indent: 0.35em; }
 .logo span { font-weight: 700; margin-left: 0.3em; color: var(--accent); }
 .logo.big { font-size: 13vh; text-shadow: 0 4px 40px rgba(0,0,0,0.6); }
-.sub { opacity: 0.8; letter-spacing: 0.3em; font-size: 2.6vh; margin: 1.5vh 0 4vh; }
+.sub { opacity: 0.8; letter-spacing: 0.3em; text-indent: 0.3em; font-size: 2.6vh; margin: 1.5vh 0 4vh; }
 .bar { width: 42vw; height: 3px; background: rgba(255,255,255,0.12); margin: 0 auto; border-radius: 3px; overflow: hidden; }
 .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #f0b35a, #ffdca0); transition: width .25s; }
 .loadtxt { margin-top: 2vh; font-size: 2.2vh; opacity: 0.7; }

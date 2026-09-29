@@ -26,7 +26,10 @@ for (const [id, ratio] of Object.entries(TARGETS)) {
   if (!fs.existsSync(src)) { console.warn('missing', src); continue; }
   // textures live next to the runtime model (public/); link them so the reader can resolve URIs
   const texLink = path.resolve('assets-src/models', id, 'textures');
-  if (!fs.existsSync(texLink)) fs.symlinkSync(path.join(dir, 'textures'), texLink);
+  // existsSync follows the link: a dangling symlink reported "missing" and symlinkSync then threw EEXIST
+  let linkStat = null; try { linkStat = fs.lstatSync(texLink); } catch { /* none */ }
+  if (linkStat?.isSymbolicLink() && !fs.existsSync(texLink)) { fs.unlinkSync(texLink); linkStat = null; }
+  if (!linkStat) fs.symlinkSync(path.join(dir, 'textures'), texLink);
   const doc = await io.read(src);
   const count = () => doc.getRoot().listMeshes().reduce((s, m) => s + m.listPrimitives().reduce((a, p) => a + (p.getIndices()?.getCount() || 0) / 3, 0), 0);
   const before = count();

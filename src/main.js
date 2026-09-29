@@ -289,6 +289,8 @@ class Game {
       this.fire.shadowAllowed = this.R.q.shadow >= 2048;
       this.fire.setShadowSize(this.R.q.shadow >= 4096 ? 1024 : 512);
       this.resizeFx();
+      // tree count and grass buffers are sized at load: raising quality silently kept the old density
+      if (this.R.q.grass > this.grass.baseDensity + 1e-6 || this.R.q.trees !== this.world.q.trees) this.ui.toast('草木の密度は再読み込み後に反映されます');
     }
     const num = (v, d) => (Number.isFinite(parseFloat(v)) ? parseFloat(v) : d);
     this.state.timeScale = num($('optTime').value, 1); if (!first) store.set('modan-time', $('optTime').value);
