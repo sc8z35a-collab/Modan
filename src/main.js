@@ -163,8 +163,10 @@ class Game {
     this.world.colliders.add(tx0, tz0, 1.55, 'tent');
     // seats
     const seats = [[fx + 2.4, fz + 0.6, 1.4], [fx - 0.6, fz - 2.5, 0.2]];
-    for (const [x, z, r] of seats) { put(P.buildLogSeat(tx), x, z, r); this.world.colliders.add(x, z, 0.5, 'seat'); }
-    const chair = put(P.buildChair(), fx + 0.4, fz + 2.6, Math.PI + 0.2);
+    // 2.2m logs had a single 0.5m collider at the centre -> walk through both ends; chain circles along the log
+    for (const [x, z, r] of seats) { put(P.buildLogSeat(tx), x, z, r); for (const o of [-0.8, 0, 0.8]) this.world.colliders.add(x + Math.cos(r) * o, z - Math.sin(r) * o, 0.3, 'seat'); }
+    // the backrest is at local +z, so the sitter faces local -z: rotation PI+0.2 faced exactly AWAY from the fire
+    const chair = put(P.buildChair(), fx + 0.4, fz + 2.6, Math.atan2(0.4, 2.6));
     this.world.colliders.add(chair.position.x, chair.position.z, 0.35, 'chair');
     // wood pile
     this.woodpile = put(P.buildWoodPile(tx), C.x - 3.5, C.z - 2.2, 0.6);
