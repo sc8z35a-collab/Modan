@@ -280,8 +280,9 @@ export function buildDock(textures, length = 14) {
   deck.castShadow = deck.receiveShadow = true;
   g.add(deck);
   for (let i = 0; i <= length / 2.2; i++) for (const s of [-1, 1]) {
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 3, 10), postMat);
-    p.position.set(s * (w / 2 - 0.05), -1.3, -i * 2.2); p.castShadow = true; g.add(p);
+    // 3m posts ended at -2.25m while the lakebed under the far end is ~-3.8m: they hung in the water
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 5, 10), postMat);
+    p.position.set(s * (w / 2 - 0.05), -2.3, -i * 2.2); p.castShadow = true; g.add(p);
   }
   // side beams
   for (const s of [-1, 1]) {

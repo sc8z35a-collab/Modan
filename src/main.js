@@ -214,7 +214,8 @@ class Game {
     }];
     // rowboat moored at dock
     this.boat = this.buildBoat(); this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, 0, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
-    this.boatBaseY = WORLD.waterLevel + 0.02; // the bob animation overwrote the initial -0.45 offset anyway
+    // hull is 0.45m deep with its rim at local y=0: at +0.02 the rim sat 4cm above the lake (boat looked sunk)
+    this.boatBaseY = WORLD.waterLevel + 0.26;
   }
 
   buildBoat() {
@@ -224,7 +225,13 @@ class Game {
     const shell = new THREE.SphereGeometry(1, 32, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2.3);
     shell.scale(0.8, 0.45, 2.2);
     const m = new THREE.Mesh(shell, wood); m.castShadow = true; g.add(m);
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.25), wood); seat.position.y = -0.12; g.add(seat);
+    // seat was 1.3m wide in a 1.6m hull at a height where the hull is only ~1.2m wide -> poked through the sides
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.04, 0.25), wood); seat.position.y = -0.12; g.add(seat);
+    // depth-only cap at the waterline: keeps the (transparent, later-drawn) lake surface out of the hull
+    const wl = -0.26, k = Math.sqrt(1 - (wl / 0.45) ** 2);
+    const cap = new THREE.Mesh(new THREE.CircleGeometry(1, 32), new THREE.MeshBasicMaterial({ colorWrite: false }));
+    cap.rotation.x = -Math.PI / 2; cap.scale.set(0.8 * k * 0.97, 2.2 * k * 0.97, 1); cap.position.y = wl; cap.renderOrder = 9;
+    g.add(cap); this.boatCap = cap;
     g.userData.bobT = 0;
     return g;
   }
@@ -496,7 +503,7 @@ class Game {
     }
 
     // render
-    if (!params.has('norefl')) this.water.renderReflection([this.grass.layers[0], this.grass.layers[1], this.particles.rain, this.viewmodel.root]);
+    if (!params.has('norefl')) this.water.renderReflection([this.grass.layers[0], this.grass.layers[1], this.particles.rain, this.viewmodel.root, this.boatCap]);
     if (params.has('nocomposer')) this.R.r.render(this.scene, this.camera); else this.R.render(dt);
   }
 }
