@@ -304,7 +304,10 @@ export class World {
         g.position.set(x, h - 0.05, z); g.rotation.y = rnd() * 6.28;
         this.scene.add(g);
         const box = new THREE.Box3().setFromObject(g);
-        const col = this.colliders.add(x, z, 0.5, 'trunk');
+        // the log is ~3m long along its local X axis: one 0.5m circle at the centre let the player walk
+        // straight through both ends -> a chain of circles along the log
+        const ry = g.rotation.y, ax = Math.cos(ry), az = -Math.sin(ry);
+        const col = [-1.2, -0.6, 0, 0.6, 1.2].map((o) => this.colliders.add(x + ax * o, z + az * o, 0.35, 'trunk'));
         this.choppables.push({ type: 'trunk', obj: g, pos: g.position, label: '倒木を割る', radius: 2.6, hp: 5, col, size: box.getSize(new THREE.Vector3()) });
         break;
       }

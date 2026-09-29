@@ -86,6 +86,7 @@ export class Colliders {
   }
   remove(c) {
     if (!c) return;
+    if (Array.isArray(c)) { for (const e of c) this.remove(e); return; }
     for (const arr of this.map.values()) { const i = arr.indexOf(c); if (i >= 0) arr.splice(i, 1); }
     const i = this.list.indexOf(c); if (i >= 0) this.list.splice(i, 1); // list kept stale entries
   }
