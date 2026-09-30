@@ -248,7 +248,7 @@ function fireKit(B, M, R, gh) {
   // flat stone at the ring edge with a cast iron skillet and a wooden spatula
   B.with(T(-0.2, gh(-0.2, 1.05), 1.05, 0, 0.5, 0), () => {
     const st = jitter(new THREE.IcosahedronGeometry(0.22, 3), 0.05, 5, 11); st.scale(1, 0.25, 0.85); smoothNormals(st);
-    B.add(st, M.iron, T(0, 0.02, 0), 0x6d6a66, { shade: (p, n, c) => { c.multiplyScalar(0.8 + 0.25 * n.y); } });
+    B.add(st, M.iron, T(0, 0.02, 0), 0x4a4744, { shade: (p, n, c) => { c.multiplyScalar(0.8 + 0.25 * n.y); } });
     const sk = vessel([[0.001, 0], [0.12, 0], [0.13, 0.008], [0.135, 0.04], [0.14, 0.045]], 0.005, 32);
     B.add(sk, M.iron, T(0, 0.075, 0), 0x1e1d1c, { local: true, shade: (p, n, c) => { if (n.y > 0.8 && p.y < 0.02) c.multiplyScalar(1.3); } });
     B.add(rbox(0.16, 0.012, 0.03, 0.005), M.iron, T(0.21, 0.105, 0, 0, 0, 0.12), 0x1e1d1c);
