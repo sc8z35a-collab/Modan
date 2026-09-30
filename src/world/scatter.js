@@ -19,11 +19,13 @@ export class Scatter {
     const e = matrix.elements;
     const key = Math.floor(e[12] / this.cell) + ',' + Math.floor(e[14] / this.cell);
     if (!k.items.has(key)) k.items.set(key, []);
-    k.items.get(key).push({ m: matrix.clone(), c: color });
+    k.items.get(key).push({ m: matrix.clone(), c: color ? color.clone() : undefined }); // callers reuse one scratch Color
   }
 
   build() {
     for (const [name, k] of this.kinds) {
+      if (k.built) continue; // build() can be called again for kinds defined later (flora) without duplicating
+      k.built = true;
       for (const [key, items] of k.items) {
         const [cx, cz] = key.split(',').map(Number);
         const chunk = {
@@ -35,7 +37,9 @@ export class Scatter {
           const group = [];
           for (const part of lod.parts) {
             const im = new THREE.InstancedMesh(part.geo, part.mat, items.length);
-            items.forEach((it, i) => { im.setMatrixAt(i, it.m); if (it.c) im.setColorAt(i, it.c); });
+            // part.tint === false: this part ignores the per-instance colour (tree colours are meant for foliage;
+            // applying them to the bark as well turned every trunk green-grey)
+            items.forEach((it, i) => { im.setMatrixAt(i, it.m); if (it.c && part.tint !== false) im.setColorAt(i, it.c); });
             im.instanceMatrix.needsUpdate = true;
             if (im.instanceColor) im.instanceColor.needsUpdate = true;
             im.computeBoundingSphere();

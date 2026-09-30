@@ -7,6 +7,7 @@ import { Scatter, Colliders } from './scatter.js';
 import { createTreeKinds, windify } from './trees.js';
 import { mulberry32, smoothstep } from '../core/noise.js';
 import { posHash } from './props.js';
+import { Flora } from './flora.js';
 
 // resolve assets against the deploy base (works at / and at a sub-path like /Modan/)
 // VITE_ASSET_BASE lets the Pages build (tools/build-pages.mjs) load the big textures/models straight from
@@ -78,8 +79,11 @@ export class World {
 
     onStep?.('森を育てています…');
     this.buildTrees(textures);
+    this.buildCanopy();
     onStep?.('岩と下草を配置中…');
     this.buildRocksAndPlants(models, textures);
+    onStep?.('草花と林床を配置中…');
+    this.flora = new Flora(this).build();
     this.scatter.build();
   }
 
@@ -98,7 +102,7 @@ export class World {
     this.treeKinds = kinds;
     for (const v of kinds.variants) this.scatter.defineKind(v.name, v.lods, { cullDist: 520 });
     const rnd = mulberry32(99);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), eul = new THREE.Euler();
     const R = 330;
     const attempts = Math.round(26000 * this.q.trees);
     let placed = 0;
@@ -126,16 +130,56 @@ export class World {
       else if (r < 0.92) kind = 'pine' + ((rnd() * 3) | 0);
       else kind = 'birch' + ((rnd() * 2) | 0);
       const sc = 0.75 + rnd() * 0.55;
-      q.setFromEuler(new THREE.Euler((rnd() - 0.5) * 0.06, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.06));
+      q.setFromEuler(eul.set((rnd() - 0.5) * 0.06, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.06));
       p.set(x, h - 0.15, z); s.set(sc, sc * (0.9 + rnd() * 0.2), sc);
       m.compose(p, q, s);
       const c = new THREE.Color().setHSL(0.25 + (rnd() - 0.5) * 0.05, 0.25 + rnd() * 0.2, 0.45 + rnd() * 0.2);
       this.scatter.add(kind, m, c.multiplyScalar(1.6));
       const variant = kinds.variants.find((v) => v.name === kind);
       this.colliders.add(x, z, variant.radius * sc + 0.1, 'tree');
+      (this.treeSpots || (this.treeSpots = [])).push({ x, z, r: (kind.startsWith('birch') ? 3.2 : 3.8) * sc });
       placed++;
     }
     this.treeCount = placed;
+  }
+
+  // canopy density (0..1) on a 2m grid from the placed trees: forest floor darkens / turns to needle litter and
+  // the grass thins out under the crowns (before, lush meadow grass grew right up to every spruce trunk)
+  buildCanopy() {
+    const res = 360, size = WORLD.size, cs = size / res, g = new Float32Array(res * res);
+    for (const t of this.treeSpots || []) {
+      const r = t.r, i0 = Math.max(0, Math.floor((t.x - r + size / 2) / cs)), i1 = Math.min(res - 1, Math.ceil((t.x + r + size / 2) / cs));
+      const j0 = Math.max(0, Math.floor((t.z - r + size / 2) / cs)), j1 = Math.min(res - 1, Math.ceil((t.z + r + size / 2) / cs));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const dx = (i + 0.5) * cs - size / 2 - t.x, dz = (j + 0.5) * cs - size / 2 - t.z, d = Math.hypot(dx, dz) / r;
+        if (d < 1) g[j * res + i] += (1 - d * d) * 0.6;
+      }
+    }
+    for (let i = 0; i < g.length; i++) g[i] = Math.min(1, g[i]);
+    this.canopy = { g, res, cs };
+    // grass density (G) / forest floor (B) in the baked world data
+    const wd = this.worldData, d = wd.data;
+    for (let j = 0; j < wd.res; j++) for (let i = 0; i < wd.res; i++) {
+      const x = (i / (wd.res - 1) - 0.5) * size, z = (j / (wd.res - 1) - 0.5) * size, c = this.canopyAt(x, z), k = (j * wd.res + i) * 4;
+      d[k + 1] *= 1 - 0.75 * c; d[k + 2] = Math.max(d[k + 2], c * 0.9);
+    }
+    wd.tex.needsUpdate = true;
+    // terrain splat: shift grass weight to the forest-floor layer under the canopy
+    const geo = this.terrain.geometry, sp = geo.attributes.splat, pos = geo.attributes.position;
+    for (let i = 0; i < sp.count; i++) {
+      const c = this.canopyAt(pos.getX(i), pos.getZ(i)) * 0.85; if (c < 0.01) continue;
+      const gr = sp.getX(i) * c; sp.setX(i, sp.getX(i) - gr); sp.setY(i, sp.getY(i) + gr);
+    }
+    sp.needsUpdate = true;
+  }
+
+  canopyAt(x, z) {
+    const C = this.canopy; if (!C) return 0;
+    const u = (x + WORLD.size / 2) / C.cs - 0.5, v = (z + WORLD.size / 2) / C.cs - 0.5;
+    const i = Math.floor(u), j = Math.floor(v), fx = u - i, fz = v - j, r = C.res;
+    if (i < 0 || j < 0 || i >= r - 1 || j >= r - 1) return 0;
+    const a = C.g[j * r + i], b = C.g[j * r + i + 1], c = C.g[(j + 1) * r + i], d = C.g[(j + 1) * r + i + 1];
+    return (a * (1 - fx) + b * fx) * (1 - fz) + (c * (1 - fx) + d * fx) * fz;
   }
 
   defineModelKind(name, root, lodDists, opts = {}) {
@@ -339,5 +383,6 @@ export class World {
       cam.updateMatrixWorld(); fr.setFromProjectionMatrix(m.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
     }
     this.scatter.update(cam.position, lodBias, fr);
+    this.flora?.update(cam.position, lodBias, fr);
   }
 }
