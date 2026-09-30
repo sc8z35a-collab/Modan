@@ -276,7 +276,18 @@ export class World {
     const porciniCap = new THREE.MeshPhysicalMaterial({ color: 0x7a4722, roughness: 0.42, clearcoat: 0.25, clearcoatRoughness: 0.6 });
     const porciniStem = new THREE.MeshStandardMaterial({ color: 0xe2d6bc, roughness: 0.85, vertexColors: true });
     const porciniPores = new THREE.MeshStandardMaterial({ color: 0xd8d09a, roughness: 0.9 });
-    const bedMat = new THREE.MeshStandardMaterial({ color: 0x3c4a1e, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1 });
+    // soft-edged litter patch (needles + a little moss) under each cluster instead of a flat green disc
+    const bedTex = (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 128; const gx = c.getContext('2d');
+      for (let i = 0; i < 700; i++) {
+        const a = rnd() * 6.28, r = Math.sqrt(rnd()) * 60, x = 64 + Math.cos(a) * r, y = 64 + Math.sin(a) * r, b = rnd() * 6.28, l = 3 + rnd() * 7;
+        const alpha = (1 - r / 62) * (0.6 + rnd() * 0.4);
+        gx.strokeStyle = rnd() < 0.25 ? `rgba(70,95,35,${alpha})` : `rgba(${100 + rnd() * 50},${60 + rnd() * 25},${28},${alpha})`;
+        gx.lineWidth = 1.2; gx.beginPath(); gx.moveTo(x, y); gx.lineTo(x + Math.cos(b) * l, y + Math.sin(b) * l); gx.stroke();
+      }
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+    })();
+    const bedMat = new THREE.MeshStandardMaterial({ map: bedTex, transparent: true, depthWrite: false, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1 });
     const chanterelle = (s) => {
       // lathe profile: thin stem flaring into a wavy funnel cap
       const pts = [];
@@ -323,7 +334,7 @@ export class World {
         g.add(o);
       }
       // a few fallen needles / moss under the cluster so it sits in the litter instead of on it
-      const bed = new THREE.Mesh(new THREE.CircleGeometry(0.2, 12), bedMat);
+      const bed = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), bedMat);
       bed.rotation.x = -Math.PI / 2; bed.position.y = 0.006; bed.receiveShadow = true; g.add(bed);
       return g;
     };
