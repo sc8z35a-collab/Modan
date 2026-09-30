@@ -178,11 +178,12 @@ function decal(size, idx) {
 
 // spruce cone (~11cm, cylindrical, pointed) lying on its side: lathe with spiral overlapping scales. Three cones
 // per instance at random angles so the forest floor gets small scattered groups
-function pineCone(rnd) {
+function pineCone(seed, radial = 12) {
+  const rnd = mulberry32(seed);
   const one = () => {
     const pts = [];
     for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push(new THREE.Vector2(Math.pow(Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.5), 0.6) * 0.019 * (1.1 - t * 0.75) + 0.002, t * 0.11)); }
-    const g = new THREE.LatheGeometry(pts, 12);
+    const g = new THREE.LatheGeometry(pts, radial);
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x);
@@ -212,10 +213,11 @@ function twigGeo(rnd) {
 
 // moss cushion: lumpy low mound (several merged bumps), fine per-vertex fuzz; vertex colour: brighter tops,
 // dark brown-green where it meets the ground
-function mossCushion(rnd) {
+function mossCushion(seed, detail = 2) {
+  const rnd = mulberry32(seed); // same bump layout for every LOD of the cushion
   const parts = [];
-  for (let k = 0; k < 5; k++) {
-    const b = new THREE.IcosahedronGeometry(0.1 + rnd() * 0.1, 3);
+  for (let k = 0; k < 4; k++) {
+    const b = new THREE.IcosahedronGeometry(0.1 + rnd() * 0.1, detail);
     b.scale(1, 0.45, 1); b.translate((rnd() - 0.5) * 0.3, -0.02, (rnd() - 0.5) * 0.3);
     parts.push(b);
   }
@@ -367,6 +369,8 @@ export class Flora {
       this.stats[name] = 0;
       return variants.length;
     };
+    // near/far LOD kinds (a moss cushion at detail 3 was 6.4k tris -> flora hit 3M tris on ultra)
+    const lod2 = (name, near, far, dNear, cull) => { S.defineKind(name + '0', [{ dist: dNear, parts: near }, { dist: cull, parts: far }], { cullDist: cull }); this.stats[name] = 0; return 1; };
     const m = new THREE.Matrix4(), qt = new THREE.Quaternion(), qy = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
     const UP = new THREE.Vector3(0, 1, 0), nv = new THREE.Vector3();
     const col = new THREE.Color();
@@ -405,9 +409,9 @@ export class Flora {
 
     // ---- forest floor: litter decals, cones, twigs, moss, mushrooms, saplings
     const nLitter = def('litter', [6, 7].map((idx) => [{ geo: decal(1.4, idx), mat: decalMat, castShadow: false }]), 55);
-    const nCone = def('cone', [[{ geo: pineCone(rnd), mat: coneMat, castShadow: false }]], 32);
+    const nCone = lod2('cone', [{ geo: pineCone(31, 12), mat: coneMat, castShadow: false }], [{ geo: pineCone(31, 5), mat: coneMat, castShadow: false }], 10, 32);
     const nTwig = def('twig', [0, 1].map(() => [{ geo: twigGeo(rnd), mat: twigMat, castShadow: false }]), 38);
-    const nMoss = def('moss', [0].map(() => [{ geo: mossCushion(rnd), mat: mossMat, castShadow: false }]), 70);
+    const nMoss = lod2('moss', [{ geo: mossCushion(7, 2), mat: mossMat, castShadow: false }], [{ geo: mossCushion(7, 1), mat: mossMat, castShadow: false }], 22, 70);
     const amanita = [0].map(() => mushroomCluster(rnd, 'amanita')), bolete = [0].map(() => mushroomCluster(rnd, 'bolete'));
     const nAm = def('amanita', amanita.map((c) => [{ geo: c.caps, mat: amanitaCap, castShadow: false }, { geo: c.stems, mat: fungusStem, castShadow: false }]), 40);
     const nBo = def('bolete', bolete.map((c) => [{ geo: c.caps, mat: boleteCap, castShadow: false }, { geo: c.stems, mat: boleteStem, castShadow: false }]), 40);
