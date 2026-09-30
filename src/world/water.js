@@ -129,7 +129,10 @@ export class Water {
           n = normalize(n);
           vec3 V = normalize(cameraPosition - vW);
           float fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
-          vec2 ruv = vRUV.xy / vRUV.w + n.xz * 0.045;
+          // reflection distortion is a screen-space offset: at 20x a 0.045 offset spans 20x more of the scene and
+          // shreds the reflection into streaks -> scale it with the lens magnification (projectionMatrix[1][1])
+          float lensMag = max(projectionMatrix[1][1] / 1.6, 1.0);
+          vec2 ruv = vRUV.xy / vRUV.w + n.xz * 0.045 / lensMag;
           vec3 refl = texture2D(tReflect, ruv).rgb;
           // absorption
           // gentler absorption in the first metre: the lake bed drops ~0.7m within 1m of the shore, so a linear
