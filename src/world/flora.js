@@ -335,11 +335,15 @@ export class Flora {
     this.world = world; this.U = world.U; this.q = world.q;
     // own scatter with 128m chunks: ~20 small kinds x 64m chunks would have cost several hundred draw calls
     this.scatter = new Scatter(world.scene, 128);
+    // tiny ground props (cones, moss, pebbles, twigs, fungi) live in a FINE 32m grid: with 128m chunks their
+    // 32-45m cull / LOD distances were meaningless (chunk-level) -> every cone of a chunk drew at LOD0 (~2M tris)
+    this.fine = new Scatter(world.scene, 32);
     this.stats = {}; this.samples = {}; // samples: a few positions per kind (QA viewer aims at them)
   }
 
   build() {
-    const U = this.U, q = this.q, S = this.scatter, WS = this.world.scatter;
+    const U = this.U, q = this.q, S = this.scatter, F = this.fine, WS = this.world.scatter;
+    const sc_ = (name) => (F.kinds.has(name) ? F : S);
     const atlas = paintAtlas();
     const rnd = mulberry32(2718);
     const noise = createNoise2D(515);
@@ -365,12 +369,12 @@ export class Flora {
     const boleteStem = new THREE.MeshStandardMaterial({ color: 0xd8c8a4, roughness: 0.85 });
 
     const def = (name, variants, cull, opts = {}) => {
-      for (let v = 0; v < variants.length; v++) S.defineKind(name + v, [{ dist: cull, parts: variants[v] }], { cullDist: cull });
+      for (let v = 0; v < variants.length; v++) (opts.fine ? F : S).defineKind(name + v, [{ dist: cull, parts: variants[v] }], { cullDist: cull });
       this.stats[name] = 0;
       return variants.length;
     };
     // near/far LOD kinds (a moss cushion at detail 3 was 6.4k tris -> flora hit 3M tris on ultra)
-    const lod2 = (name, near, far, dNear, cull) => { S.defineKind(name + '0', [{ dist: dNear, parts: near }, { dist: cull, parts: far }], { cullDist: cull }); this.stats[name] = 0; return 1; };
+    const lod2 = (name, near, far, dNear, cull) => { F.defineKind(name + '0', [{ dist: dNear, parts: near }, { dist: cull, parts: far }], { cullDist: cull }); this.stats[name] = 0; return 1; };
     const m = new THREE.Matrix4(), qt = new THREE.Quaternion(), qy = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
     const UP = new THREE.Vector3(0, 1, 0), nv = new THREE.Vector3();
     const col = new THREE.Color();
@@ -381,7 +385,7 @@ export class Flora {
       if (tilt) { qy.setFromAxisAngle(ps.set(rnd() - 0.5, 0, rnd() - 0.5).normalize(), (rnd() - 0.5) * tilt); qt.premultiply(qy); }
       ps.set(x, h - sink, z); sc.setScalar(s);
       m.compose(ps, qt, sc);
-      S.add(name + ((rnd() * nVar) | 0), m, color);
+      const kn = name + ((rnd() * nVar) | 0); sc_(kn).add(kn, m, color);
       this.stats[name]++; this.sample(name, x, h, z);
     };
     const C = WORLD.camp;
@@ -408,13 +412,13 @@ export class Flora {
     }
 
     // ---- forest floor: litter decals, cones, twigs, moss, mushrooms, saplings
-    const nLitter = def('litter', [6, 7].map((idx) => [{ geo: decal(1.4, idx), mat: decalMat, castShadow: false }]), 55);
+    const nLitter = def('litter', [6, 7].map((idx) => [{ geo: decal(1.4, idx), mat: decalMat, castShadow: false }]), 55, { fine: true });
     const nCone = lod2('cone', [{ geo: pineCone(31, 12), mat: coneMat, castShadow: false }], [{ geo: pineCone(31, 5), mat: coneMat, castShadow: false }], 10, 32);
-    const nTwig = def('twig', [0, 1].map(() => [{ geo: twigGeo(rnd), mat: twigMat, castShadow: false }]), 38);
+    const nTwig = def('twig', [0].map(() => [{ geo: twigGeo(rnd), mat: twigMat, castShadow: false }]), 38, { fine: true });
     const nMoss = lod2('moss', [{ geo: mossCushion(7, 2), mat: mossMat, castShadow: false }], [{ geo: mossCushion(7, 1), mat: mossMat, castShadow: false }], 22, 70);
     const amanita = [0].map(() => mushroomCluster(rnd, 'amanita')), bolete = [0].map(() => mushroomCluster(rnd, 'bolete'));
-    const nAm = def('amanita', amanita.map((c) => [{ geo: c.caps, mat: amanitaCap, castShadow: false }, { geo: c.stems, mat: fungusStem, castShadow: false }]), 40);
-    const nBo = def('bolete', bolete.map((c) => [{ geo: c.caps, mat: boleteCap, castShadow: false }, { geo: c.stems, mat: boleteStem, castShadow: false }]), 40);
+    const nAm = def('amanita', amanita.map((c) => [{ geo: c.caps, mat: amanitaCap, castShadow: false }, { geo: c.stems, mat: fungusStem, castShadow: false }]), 40, { fine: true });
+    const nBo = def('bolete', bolete.map((c) => [{ geo: c.caps, mat: boleteCap, castShadow: false }, { geo: c.stems, mat: boleteStem, castShadow: false }]), 40, { fine: true });
     const forestSpot = (R, minCanopy) => {
       for (let k = 0; k < 30; k++) {
         const [x, z] = ring(R, 6);
@@ -452,7 +456,7 @@ export class Flora {
     const nPad = def('lilypad', [0].map(() => [{ geo: lilyPad(rnd), mat: padMat, castShadow: false }]), 90);
     const heart = new THREE.SphereGeometry(0.018, 8, 4); heart.scale(1, 0.6, 1); heart.translate(0, 0.035, 0);
     const nLily = def('lily', [[{ geo: lilyFlower(), mat: lilyMat, castShadow: false }, { geo: heart, mat: lilyHeart, castShadow: false }]], 70);
-    const nPeb = def('pebble', [0, 1].map(() => [{ geo: pebble(rnd), mat: pebbleMat, castShadow: false }]), 45);
+    const nPeb = def('pebble', [0].map(() => [{ geo: pebble(rnd), mat: pebbleMat, castShadow: false }]), 45, { fine: true });
     const nDrift = def('drift', [0, 1].map(() => [{ geo: driftwood(rnd), mat: driftMat, castShadow: true }]), 120);
     const L = WORLD.lake;
     const dockZone = (x, z) => x > -12 && x < -1 && z < -8 && z > -42;
@@ -498,12 +502,12 @@ export class Flora {
     }
     for (let i = 0; i < 26; i++) { const p = shore(-0.5, 2.5); if (p) { add('drift', nDrift, p[0], p[1], 0.8 + rnd() * 0.5, { align: 1, sink: 0.03, tilt: 0.08 }); this.world.colliders.add(p[0], p[1], 0.3, 'drift'); } }
 
-    S.build();
+    S.build(); F.build();
     // saplings went into the world scatter: World.build() calls its build() after this
     return this;
   }
 
   sample(name, x, y, z) { const a = this.samples[name] || (this.samples[name] = []); if (a.length < 40) a.push([+x.toFixed(1), +y.toFixed(2), +z.toFixed(1)]); }
 
-  update(camPos, lodBias = 1, frustum = null) { this.scatter.update(camPos, lodBias, frustum); }
+  update(camPos, lodBias = 1, frustum = null) { this.scatter.update(camPos, lodBias, frustum); this.fine.update(camPos, lodBias, frustum); }
 }

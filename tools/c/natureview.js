@@ -65,7 +65,7 @@ try {
   if (world.flora && q.has('floraoff')) world.flora.scatter.chunks.forEach((c) => c.lods.forEach((l) => l.meshes.forEach((m) => (m.visible = false))));
   if (q.has('floraoff')) { r.info.reset(); r.render(scene, cam); }
   let fm = 0, fms = 0, ftri = 0;
-  world.flora?.scatter.chunks.forEach((c) => c.lods.forEach((l) => l.meshes.forEach((m) => { if (m.visible) { fm++; if (m.castShadow) fms++; const t = (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3 * m.count; ftri += t; const k = m.name.replace(/\d+$/, ''); (window.__fk || (window.__fk = {}))[k] = ((window.__fk[k] || 0) + t) | 0; } })));
+  [...(world.flora?.scatter.chunks || []), ...(world.flora?.fine.chunks || [])].forEach((c) => c.lods.forEach((l) => l.meshes.forEach((m) => { if (m.visible) { fm++; if (m.castShadow) fms++; const t = (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3 * m.count; ftri += t; const k = m.name.replace(/\d+$/, ''); (window.__fk || (window.__fk = {}))[k] = ((window.__fk[k] || 0) + t) | 0; } })));
   window.__info = { byKind: window.__fk, floraMeshes: fm, floraShadowMeshes: fms, floraTris: Math.round(ftri), calls: r.info.render.calls, tris: r.info.render.triangles, trees: world.treeCount, flora: world.flora?.stats };
   r.render(scene, cam);
   lg('done', JSON.stringify(window.__info));
