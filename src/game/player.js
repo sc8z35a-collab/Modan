@@ -18,6 +18,7 @@ export class Player {
     this.inWater = 0;
     this._f = new THREE.Vector3(); this._r = new THREE.Vector3(); this._want = new THREE.Vector3(); this._fw = new THREE.Vector3();
     this._grounded = false;
+    this.stab = 1; // lens stabilisation: 1 at <=1x, ~1/zoom^0.8 at tele (head bob / roll / breathing are damped)
   }
 
   onPlatform(x, z) { for (const p of this.platforms) if (p.contains(x, z)) return p; return null; }
@@ -89,15 +90,15 @@ export class Player {
       if (Math.floor(prev / Math.PI) !== Math.floor(this.stepPhase / Math.PI)) this.audio.footstep(this.surfaceFn(nx, nz, water), sp > 4);
       if (this.stepPhase > 1e4 * Math.PI) this.stepPhase -= 1e4 * Math.PI;
     }
-    const amp = Math.min(sp / 5.6, 1);
+    const amp = Math.min(sp / 5.6, 1) * this.stab;
     const bobY = Math.abs(Math.sin(this.stepPhase)) * 0.055 * amp;
     const bobX = Math.cos(this.stepPhase) * 0.03 * amp;
-    const breathe = Math.sin(performance.now() * 0.0012) * 0.006;
+    const breathe = Math.sin(performance.now() * 0.0012) * 0.006 * this.stab;
 
     const cam = this.camera;
     cam.position.set(this.pos.x, this.pos.y + this.eyeCur + bobY + breathe, this.pos.z);
     cam.position.addScaledVector(r, bobX);
-    cam.rotation.set(this.pitch, this.yaw, -this.vel.dot(r) * 0.004, 'YXZ');
+    cam.rotation.set(this.pitch, this.yaw, -this.vel.dot(r) * 0.004 * this.stab, 'YXZ');
     // camera shouldn't go below water surface visually
     if (cam.position.y < WORLD.waterLevel + 0.25) cam.position.y = WORLD.waterLevel + 0.25;
   }

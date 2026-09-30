@@ -52,13 +52,18 @@ export class Scatter {
     }
   }
 
-  update(camPos, lodBias = 1) {
+  // lodBias > 1 (telephoto lens) only applies to chunks inside the view frustum: off-screen chunks still cast
+  // shadows / get reflected, and promoting all of them to LOD0 at 20x would multiply the shadow-pass cost
+  update(camPos, lodBias = 1, frustum = null) {
+    const sph = this._sph || (this._sph = new THREE.Sphere());
     for (const c of this.chunks) {
       const d = Math.hypot(c.center.x - camPos.x, c.center.z - camPos.z) - this.cell * 0.7;
+      let bias = lodBias;
+      if (bias > 1 && frustum) { sph.center.copy(c.center); sph.radius = this.cell * 0.75 + 30; if (!frustum.intersectsSphere(sph)) bias = 1; }
       let idx = -1;
-      if (d < c.cullDist * lodBias) {
+      if (d < c.cullDist * bias) {
         idx = c.lods.length - 1;
-        for (let i = 0; i < c.lods.length; i++) if (d < c.lods[i].dist * lodBias) { idx = i; break; }
+        for (let i = 0; i < c.lods.length; i++) if (d < c.lods[i].dist * bias) { idx = i; break; }
       }
       if (idx === c.cur) continue;
       c.lods.forEach((l, i) => l.meshes.forEach((m) => (m.visible = i === idx)));

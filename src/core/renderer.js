@@ -5,6 +5,7 @@ import {
   DepthOfFieldEffect, NoiseEffect, BlendFunction,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
+import { Lens } from './lens.js';
 
 export const QUALITY = {
   ultra: { pixelRatio: 2.0, shadow: 4096, ao: true, aoHalf: false, grass: 1.0, trees: 1.0, water: 0.6, bloom: true, smaa: true },
@@ -32,6 +33,8 @@ export class Renderer {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.08, 2600);
     this.scene.add(this.camera);
+    // ultra-wide 0.5x / optical 20x / digital 2x (owns camera.fov; resize() only sets its 1x base FOV)
+    this.lens = new Lens(this.camera);
     this.maxAniso = r.capabilities.getMaxAnisotropy();
     this.photoMode = false;
     this._resize = () => this.resize();
@@ -79,7 +82,30 @@ export class Renderer {
     const effects = [this.bloom, this.tone, this.grade, this.bc, this.vignette, grain];
     composer.addPass(new EffectPass(camera, ...effects));
     if (q.smaa) composer.addPass(new EffectPass(camera, new SMAAEffect({ preset: SMAAPreset.HIGH })));
+    // lens pass LAST (digital crop must upscale the anti-aliased image). It is disabled at exactly 1x; a disabled
+    // last pass would leave the previous pass rendering into an off-screen buffer (black screen), so the
+    // renderToScreen flag is handed over explicitly in setLensActive().
+    this.lensPrev = composer.passes[composer.passes.length - 1];
+    this.lensPass = new EffectPass(camera, this.lens.effect);
+    composer.addPass(this.lensPass);
+    this._lensOn = null;
+    this.setLensActive(false);
     this.resize();
+  }
+
+  setLensActive(on) {
+    if (this._lensOn === on || !this.lensPass) return;
+    this._lensOn = on;
+    this.lensPass.enabled = on; this.lensPass.renderToScreen = on;
+    this.lensPrev.renderToScreen = !on;
+  }
+
+  // per-frame: smooth zoom, enable the lens pass only when it does something
+  updateLens(dt) {
+    const changed = this.lens.update(dt);
+    const z = this.lens.zoom;
+    if (changed && this.photoMode) this.setPhotoMode(true, this.focusDist); // DOF depth follows the focal length
+    this.setLensActive(Math.abs(z - 1) > 1e-3);
   }
 
   setQuality(name) {
@@ -100,7 +126,10 @@ export class Renderer {
     if (on) {
       const coc = this.dof.cocMaterial;
       coc.focusDistance = focusDist;
-      coc.focusRange = Math.max(1.2, focusDist * 0.35);
+      // longer focal length = shallower depth of field (DoF ~ 1/f^2 at a fixed subject distance)
+      const z = Math.max(0.5, this.lens.zoom);
+      coc.focusRange = Math.max(0.25, focusDist * 0.35 / Math.pow(z, 0.8));
+      this.dof.bokehScale = Math.min(6, 3.2 * Math.pow(z, 0.25));
     }
   }
 
@@ -111,8 +140,8 @@ export class Renderer {
     this.r.setSize(w, h, false);
     this.camera.aspect = w / h;
     // wider FOV in landscape phones feels more natural
-    this.camera.fov = w / h > 1.9 ? 64 : 70;
-    this.camera.updateProjectionMatrix();
+    this.lens.setBaseFov(w / h > 1.9 ? 64 : 70);
+    this.lens.apply(true);
     this.composer?.setSize(w, h, false);
   }
 
