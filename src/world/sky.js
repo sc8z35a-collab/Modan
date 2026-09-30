@@ -134,6 +134,8 @@ void main(){
     vec2 uv = vec2(dot(d,t), dot(d,b));
     vec2 q = uv / 0.0297;                          // disk-local coords, |q| <= 1 (disk radius ~ acos(0.99955))
     float r2 = clamp(dot(q, q), 0.0, 1.0);
+    // stars must not shine through the disk (the moon is in front of them)
+    col = mix(col, uZenith * 0.9 + uHorizon * 0.1, disk * uNight * 0.85);
     vec3 nrm = vec3(q, sqrt(1.0 - r2));            // sphere normal, z towards the viewer
     float pa = uMoonPhase * 6.28318;               // phase angle: light comes from the side, sweeping to the front
     vec3 L = normalize(vec3(sin(pa), 0.25 * sin(pa), -cos(pa)));
@@ -144,9 +146,9 @@ void main(){
     float limb = 0.72 + 0.28 * nrm.z;              // limb darkening
     // keep the disk in the tone-mapper's shoulder (was ~2.2 -> clipped to a flat white blob when zoomed)
     vec3 lunar = vec3(0.93,0.93,0.97) * (1.15 - maria*0.55 + crater*0.18) * limb;
-    vec3 earthshine = vec3(0.012, 0.016, 0.026) * (1.0 - illum) * (0.8 + 0.2 * (1.0 - maria));
+    vec3 earthshine = vec3(0.02, 0.026, 0.04) * (1.0 - illum) * (0.8 + 0.2 * (1.0 - maria));
     darkSide = disk * (1.0 - lit);
-    col = mix(col, col * 0.35, darkSide * uNight);  // dark limb hides the stars / milky way behind it
+    col = mix(col, col * 0.8, darkSide * uNight);  // dark limb hides faint stars but stays close to the sky tone
     col += (lunar * lit + earthshine) * disk * uNight;
   }
   float haloMask = moonUp * (1.0 - darkSide * 0.92);
