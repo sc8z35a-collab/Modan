@@ -17,6 +17,7 @@ import { Interactions } from './game/interactions.js';
 import { ViewModel } from './game/viewmodel.js';
 import { UI } from './ui/ui.js';
 import { LensUI } from './ui/lensui.js';
+import { buildCampDetails } from './world/campdetail.js';
 import { installLaneD } from './fx/laned.js';
 import { clamp, lerp, smoothstep } from './core/noise.js';
 
@@ -170,6 +171,7 @@ class Game {
     // tent
     const tx0 = C.x - 6.5, tz0 = C.z + 3.5;
     this.tent = put(P.buildTent(U), tx0, tz0, 0.9, 0.02);
+    P.settleToGround(this.tent, heightAt); // Lane B: pegs / guy lines followed flat ground (up to 9cm floating)
     this.tentPos = new THREE.Vector3(tx0 + Math.sin(0.9) * 1.8, 0, tz0 + Math.cos(0.9) * 1.8);
     this.world.colliders.add(tx0, tz0, 1.55, 'tent');
     // seats
@@ -185,14 +187,10 @@ class Game {
     // lanterns
     this.lanterns = [];
     const l1 = put(P.buildLantern(), C.x - 4.4, C.z + 5.8); this.lanterns.push(l1);
-    // table w/ lantern (simple folding table)
-    const table = new THREE.Group();
-    const top = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.03, 0.6), new THREE.MeshStandardMaterial({ map: tx.brown_planks_05.diff, normalMap: tx.brown_planks_05.nor, roughness: 0.7 }));
-    top.position.y = 0.7; top.castShadow = top.receiveShadow = true; table.add(top);
-    for (const [a, b] of [[-0.5, -0.25], [0.5, -0.25], [-0.5, 0.25], [0.5, 0.25]]) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.7), new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.4 })); l.position.set(a, 0.35, b); table.add(l); }
-    const l2 = P.buildLantern(); l2.position.y = 0.715; table.add(l2); this.lanterns.push(l2);
-    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.09, 16), new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.3 })); mug.position.set(-0.3, 0.76, 0.1); table.add(mug);
-    put(table, C.x + 4.2, C.z + 4.2, -0.5);
+    // folding table w/ lantern (Lane B: slatted top, rails, cord; the mug moved to campdetail)
+    const table = put(P.buildTable(tx), C.x + 4.2, C.z + 4.2, -0.5);
+    if (table.userData.lantern) this.lanterns.push(table.userData.lantern);
+    this.table = table;
     this.world.colliders.add(C.x + 4.2, C.z + 4.2, 0.6, 'table');
     // string lights between tent and a pole
     // wooden poles for the string lights
@@ -227,9 +225,13 @@ class Game {
       contains: (x, z) => { v.set(x, 0.55, z).applyMatrix4(inv); return Math.abs(v.x) < 1.0 && v.z < 0.3 && v.z > -dockLen; },
     }];
     // rowboat moored at dock
-    this.boat = this.buildBoat(); this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, 0, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
+    this.boat = P.buildRowboat(tx); this.boatCap = this.boat.userData.cap; // Lane B: clinker-built rowboat this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, 0, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
     // hull is 0.45m deep with its rim at local y=0: at +0.02 the rim sat 4cm above the lake (boat looked sunk)
     this.boatBaseY = WORLD.waterLevel + 0.26;
+    // Lane B: ~40 small camp props (chopping block, cooler, stove, sleeping bag, washing line, tackle...)
+    this.campDetails = buildCampDetails({ scene: this.scene, textures: tx, U, heightAt, colliders: this.world.colliders, camp: C,
+      firePos: new THREE.Vector3(fx, heightAt(fx, fz), fz), tent: this.tent, tentOrigin: { x: tx0, z: tz0 }, tentRot: 0.9, poleA, dock: this.dock,
+      dockEnd: this.dockEnd, boat: this.boat, table });
   }
 
   buildBoat() {
@@ -385,7 +387,7 @@ class Game {
         const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t;
         if (y <= Math.max(heightAt(x, z), WORLD.waterLevel)) { fd = t; break; }
       }
-      const hit = rc.intersectObjects([this.tent, this.fireRing, this.dock, this.boat], true)[0];
+      const hit = rc.intersectObjects([this.tent, this.fireRing, this.dock, this.boat, this.table, this.campDetails?.group].filter(Boolean), true)[0];
       if (hit && hit.distance < fd) fd = hit.distance;
       const f = document.createElement('div'); f.id = 'flash'; document.body.appendChild(f);
       requestAnimationFrame(() => { f.style.opacity = 0.8; setTimeout(() => { f.style.opacity = 0; setTimeout(() => f.remove(), 500); }, 80); });
