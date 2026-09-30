@@ -24,6 +24,27 @@ uniform float uCA;        // lateral chromatic aberration strength (uv units at 
 uniform float uSharpen;   // digital-zoom sharpening
 uniform float uCorner;    // extra corner falloff (ultra-wide cos^4 law)
 
+// 9-tap Catmull-Rom bicubic (Jimenez) - smooth upscaling for the digital crop
+vec3 sampleBicubic(vec2 uv){
+  vec2 sz = 1.0 / texelSize;
+  vec2 sp = uv * sz; vec2 tp = floor(sp - 0.5) + 0.5; vec2 f = sp - tp;
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f)), w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f)), w3 = f * f * (-0.5 + 0.5 * f);
+  vec2 w12 = w1 + w2, o12 = w2 / w12;
+  vec2 t0 = (tp - 1.0) * texelSize, t3 = (tp + 2.0) * texelSize, t12 = (tp + o12) * texelSize;
+  vec3 r = vec3(0.0);
+  r += texture2D(inputBuffer, vec2(t0.x, t0.y)).rgb * w0.x * w0.y;
+  r += texture2D(inputBuffer, vec2(t12.x, t0.y)).rgb * w12.x * w0.y;
+  r += texture2D(inputBuffer, vec2(t3.x, t0.y)).rgb * w3.x * w0.y;
+  r += texture2D(inputBuffer, vec2(t0.x, t12.y)).rgb * w0.x * w12.y;
+  r += texture2D(inputBuffer, vec2(t12.x, t12.y)).rgb * w12.x * w12.y;
+  r += texture2D(inputBuffer, vec2(t3.x, t12.y)).rgb * w3.x * w12.y;
+  r += texture2D(inputBuffer, vec2(t0.x, t3.y)).rgb * w0.x * w3.y;
+  r += texture2D(inputBuffer, vec2(t12.x, t3.y)).rgb * w12.x * w3.y;
+  r += texture2D(inputBuffer, vec2(t3.x, t3.y)).rgb * w3.x * w3.y;
+  return max(r, 0.0);
+}
+
 vec2 panini(vec2 vp, float d){
   float viewDist = 1.0 + d;
   float hyp = vp.x * vp.x + viewDist * viewDist;
@@ -51,14 +72,15 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   vec2 dir = c * r2 * uCA;
   vec3 col;
   col.r = texture2D(inputBuffer, lensUv(uv + dir)).r;
-  col.g = texture2D(inputBuffer, suv).g;
+  col.g = uDigital > 1.001 ? sampleBicubic(suv).g : texture2D(inputBuffer, suv).g;
   col.b = texture2D(inputBuffer, lensUv(uv - dir)).b;
   if (uSharpen > 0.001) {
     // unsharp mask in SOURCE texel space (what a phone ISP does after upscaling a sensor crop)
     vec2 t = texelSize;
     vec3 blur = texture2D(inputBuffer, suv + vec2(t.x, 0.0)).rgb + texture2D(inputBuffer, suv - vec2(t.x, 0.0)).rgb
               + texture2D(inputBuffer, suv + vec2(0.0, t.y)).rgb + texture2D(inputBuffer, suv - vec2(0.0, t.y)).rgb;
-    col += (col - blur * 0.25) * uSharpen;
+    // halo-limited: clamp the boost so bright edges (sky vs. tree) don't ring
+    col += clamp((col - blur * 0.25) * uSharpen, -0.08, 0.08);
     col = max(col, 0.0);
   }
   // natural vignetting of very wide lenses (cos^4 falloff), applied on top of the global artistic vignette
@@ -168,7 +190,7 @@ export class Lens {
     U.get('uPaniniS').value = s;
     const dg = this.digital;
     U.get('uDigital').value = dg;
-    U.get('uSharpen').value = (dg - 1) * 0.7;
+    U.get('uSharpen').value = (dg - 1) * 0.45;
     // lateral CA: strongest on the ultra-wide, a touch on the long tele, clean around 1-5x
     U.get('uCA').value = 0.0035 * smooth(1, 0.5, opt) + 0.0012 * smooth(8, 20, opt) + 0.0015 * (dg - 1);
     U.get('uCorner').value = 1.6 * smooth(0.9, 0.5, opt);
