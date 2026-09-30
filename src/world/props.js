@@ -230,7 +230,7 @@ export function buildFireRing(textures) {
   // ash bed: domed disc, light grey centre -> black charcoal edge, conformed later by settle (flat ring area)
   const ash = new THREE.CircleGeometry(0.62, 40, 0, Math.PI * 2); ash.rotateX(-Math.PI / 2);
   { const p = ash.attributes.position; for (let i = 0; i < p.count; i++) { const r = Math.hypot(p.getX(i), p.getZ(i)); p.setY(i, 0.02 + 0.035 * (1 - (r / 0.62) ** 2) + (posHash(p.getX(i), 0, p.getZ(i), 4) - 0.5) * 0.01); } ash.computeVertexNormals(); }
-  B.add(ash, ashMat, null, 0xffffff, { shade: (q, n, c) => { const r = Math.hypot(q.x, q.z) / 0.62; const v = 0.34 - 0.28 * r + (posHash(q.x * 3, 1, q.z * 3, 2) - 0.5) * 0.14; // grey ash, not snow c.setRGB(v, v * 0.97, v * 0.94); } });
+  B.add(ash, ashMat, null, 0xffffff, { shade: (q, n, c) => { const r = Math.hypot(q.x, q.z) / 0.62; const v = 0.34 - 0.28 * r + (posHash(q.x * 3, 1, q.z * 3, 2) - 0.5) * 0.14; /* grey ash, not snow */ c.setRGB(v, v * 0.97, v * 0.94); } });
   // charcoal chunks + white-ashed ember ends + scorched ground ring
   for (let i = 0; i < 38; i++) {
     const a = rnd() * 6.283, d = Math.sqrt(rnd()) * 0.5, x = Math.cos(a) * d, z = Math.sin(a) * d;
