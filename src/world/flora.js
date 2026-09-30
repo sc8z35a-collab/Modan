@@ -239,9 +239,21 @@ function reedClump(rnd, n = 22, cattails = 3) {
 
 function lilyPad(rnd) {
   const r = 0.12 + rnd() * 0.1, notch = 0.35;
-  const g = new THREE.CircleGeometry(r, 14, notch / 2, Math.PI * 2 - notch);
+  const g = new THREE.CircleGeometry(r, 22, notch / 2, Math.PI * 2 - notch);
+  { const tmp = g.toNonIndexed(); g.dispose(); return lilyPadFinish(tmp, r); }
+}
+function lilyPadFinish(g, r) {
   g.rotateX(-Math.PI / 2);
-  const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, Math.hypot(p.getX(i), p.getZ(i)) * 0.06);
+  // curled-up rim + slight cup, uv-free vein shading via vertex colours (darker radial veins, lighter rim)
+  const p = g.attributes.position, c = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i), d = Math.hypot(x, z) / r, a = Math.atan2(z, x);
+    p.setY(i, d * r * 0.05 + Math.pow(Math.max(0, d - 0.85), 2) * r * 1.6);
+    const vein = 0.85 + 0.15 * Math.abs(Math.sin(a * 9));
+    const k = vein * (0.85 + d * 0.25);
+    c[i * 3] = k * (0.9 + d * 0.25); c[i * 3 + 1] = k; c[i * 3 + 2] = k * 0.85;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
   g.translate(0, 0.012, 0); g.computeVertexNormals();
   return g;
 }
@@ -324,8 +336,9 @@ export class Flora {
     const mossMat = new THREE.MeshStandardMaterial({ map: paintMossTex(), roughness: 1, color: 0xc8d8a8 });
     const reedMat = windify(new THREE.MeshStandardMaterial({ color: 0x6f7f3a, side: THREE.DoubleSide, roughness: 0.7 }), U, 15, false);
     const cattailMat = windify(new THREE.MeshStandardMaterial({ color: 0x4a2c18, roughness: 0.95 }), U, 15, false);
-    const padMat = new THREE.MeshStandardMaterial({ color: 0x3f6526, roughness: 0.35, side: THREE.DoubleSide });
-    const lilyMat = new THREE.MeshStandardMaterial({ color: 0xf6f2ea, roughness: 0.5, emissive: 0x151410 });
+    const padMat = new THREE.MeshStandardMaterial({ color: 0x3f6526, roughness: 0.3, side: THREE.DoubleSide, vertexColors: true });
+    const lilyMat = new THREE.MeshStandardMaterial({ color: 0xf8e4ea, roughness: 0.5, emissive: 0x1a1012 });
+    const lilyHeart = new THREE.MeshStandardMaterial({ color: 0xf2c030, roughness: 0.6, emissive: 0x2a1c00 });
     const pebbleMat = new THREE.MeshStandardMaterial({ map: this.world.assets.textures.rocky_terrain_02?.diff, color: 0xffffff, roughness: 0.5 });
     const driftMat = new THREE.MeshStandardMaterial({ map: this.world.assets.textures.bark_brown_02?.diff, color: 0xb8b0a4, roughness: 0.9 });
     const amanitaCap = new THREE.MeshStandardMaterial({ map: paintAmanitaTex(), roughness: 0.45 });
@@ -417,7 +430,8 @@ export class Flora {
     const reeds = [0, 1].map(() => reedClump(rnd, 18 + ((rnd() * 10) | 0), (rnd() * 4) | 0));
     const nReed = def('reed', reeds.map((r) => [{ geo: r.blades, mat: reedMat, castShadow: true }, ...(r.heads ? [{ geo: r.heads, mat: cattailMat, castShadow: true }] : [])]), 110);
     const nPad = def('lilypad', [0].map(() => [{ geo: lilyPad(rnd), mat: padMat, castShadow: false }]), 90);
-    const nLily = def('lily', [[{ geo: lilyFlower(), mat: lilyMat, castShadow: false }]], 70);
+    const heart = new THREE.SphereGeometry(0.018, 8, 4); heart.scale(1, 0.6, 1); heart.translate(0, 0.035, 0);
+    const nLily = def('lily', [[{ geo: lilyFlower(), mat: lilyMat, castShadow: false }, { geo: heart, mat: lilyHeart, castShadow: false }]], 70);
     const nPeb = def('pebble', [0, 1].map(() => [{ geo: pebble(rnd), mat: pebbleMat, castShadow: false }]), 45);
     const nDrift = def('drift', [0, 1].map(() => [{ geo: driftwood(rnd), mat: driftMat, castShadow: true }]), 120);
     const L = WORLD.lake;
@@ -454,7 +468,7 @@ export class Flora {
         const x = p[0] + (rnd() - 0.5) * 4, z = p[1] + (rnd() - 0.5) * 4;
         const dh = heightAt(x, z); if (dh > -0.35 || dh < -2.6 || dockZone(x, z)) continue; // lilies root in 0.4-2.6m
         add('lilypad', nPad, x, z, 0.8 + rnd() * 0.6, { y: WORLD.waterLevel, color: col.setHSL(0.24 + rnd() * 0.06, 0.45, 0.35 + rnd() * 0.2) });
-        if (rnd() < 0.18) add('lily', nLily, x + 0.05, z + 0.05, 0.8 + rnd() * 0.5, { y: WORLD.waterLevel });
+        if (rnd() < 0.18) add('lily', nLily, x + 0.05, z + 0.05, 1.6 + rnd() * 0.8, { y: WORLD.waterLevel });
       }
     }
     for (let i = 0; i < Math.round(2400 * gq); i++) {
