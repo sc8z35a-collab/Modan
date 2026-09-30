@@ -190,7 +190,7 @@ export class Particles {
   }
 
   update(dt, cam, rain, env) {
-    this.updateAmbient(dt, cam, rain, env);
+    this.updateAmbient(dt, cam, rain, env || this.env); // this.env is filled by src/fx/laned.js
     for (let i = this.chipsList.length - 1; i >= 0; i--) {
       const m = this.chipsList[i], u = m.userData;
       u.life -= dt; u.v.y -= 9.8 * dt;
