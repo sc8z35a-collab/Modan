@@ -137,10 +137,12 @@ void main(){
     float pa = uMoonPhase * 6.28318;               // phase angle: light comes from the side, sweeping to the front
     vec3 L = normalize(vec3(sin(pa), 0.25 * sin(pa), -cos(pa)));
     float lit = smoothstep(-0.06, 0.08, dot(nrm, L));
-    float maria = fbm(uv*60.0*1.4+3.0);
-    float crater = smoothstep(0.55, 0.8, fbm(uv*60.0*5.0 + 11.0)) * 0.25;
-    float limb = 0.75 + 0.25 * nrm.z;              // limb darkening
-    vec3 lunar = vec3(0.95,0.95,1.0) * (2.2 - maria*1.4 - crater) * limb;
+    // maria: large dark basalt plains (low-frequency, high contrast) + bright ray craters (high-frequency)
+    float maria = smoothstep(0.42, 0.68, fbm(q*1.6 + 3.0));
+    float crater = smoothstep(0.6, 0.85, fbm(q*7.0 + 11.0));
+    float limb = 0.72 + 0.28 * nrm.z;              // limb darkening
+    // keep the disk in the tone-mapper's shoulder (was ~2.2 -> clipped to a flat white blob when zoomed)
+    vec3 lunar = vec3(0.93,0.93,0.97) * (1.15 - maria*0.55 + crater*0.18) * limb;
     vec3 earthshine = vec3(0.05, 0.065, 0.1) * (1.0 - illum);
     col = mix(col, col * 0.2, disk * (1.0 - lit) * uNight);  // dark side hides the stars behind it
     col += (lunar * lit + earthshine) * disk * uNight;
