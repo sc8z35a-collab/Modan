@@ -414,6 +414,7 @@ class Game {
   async qaPhoto() {
     const L = this.R.lens, out = {};
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < 200 && !this.started; i++) await wait(100); // autostart awaits fullscreen (<=1.5s)
     this.togglePhoto(true); await wait(300);
     out.ui = !$('photoUI').classList.contains('hidden') && getComputedStyle($('lensbar')).display !== 'none';
     out.dofOn = this.R.dofPass.enabled; out.focus0 = +this.R.focusDist.toFixed(2);
