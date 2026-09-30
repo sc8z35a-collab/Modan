@@ -66,6 +66,18 @@ export class FieldGuide {
     this.meta = {};
     this.metaP = fetch(`${BASE}assets/photos/photos.json`).then((r) => (r.ok ? r.json() : {})).then((m) => { this.meta = m || {}; }).catch(() => {});
     this.build();
+    this.hook();
+  }
+
+  // Zero-touch integration with files owned by other lanes: catching a fish goes through UI.showCatch(fish),
+  // gathering changes GameState.inv -> observe those instead of editing interactions.js.
+  hook() {
+    const ui = this.g?.ui;
+    if (ui && typeof ui.showCatch === 'function' && !ui.showCatch.__fg) {
+      const orig = ui.showCatch.bind(ui);
+      ui.showCatch = (fish) => { orig(fish); try { this.unlockFish(fish?.name, fish?.size); } catch { /* never break the catch */ } };
+      ui.showCatch.__fg = true;
+    }
   }
 
   load() {
@@ -147,6 +159,8 @@ export class FieldGuide {
     this.isOpen = true;
     this.hideDetail(); this.render();
     this.root.classList.remove('hidden');
+    // pause like the menu does (restore the previous state on close so opening it from the menu keeps the menu paused)
+    if (this.g) { this._wasPaused = !!this.g.paused; this.g.paused = true; }
     this.g?.input?.reset?.();
   }
   close() {
@@ -154,9 +168,51 @@ export class FieldGuide {
     this.isOpen = false;
     this.root.classList.add('hidden');
     this.hideDetail();
+    if (this.g) this.g.paused = this._wasPaused;
     this.g?.input?.reset?.();
   }
   toggle() { this.isOpen ? this.close() : this.open(); }
+
+  // Called from the game loop (cheap: runs its checks 2x per second). Unlocks things the player simply
+  // *experiences*: trees while walking in the forest, fireflies at night, lilies at the shore, birds heard.
+  // s = { x, z, night, hours, lakeDist, rain }
+  update(dt, s) {
+    if (!s) return;
+    this._t = (this._t || 0) + dt;
+    if (this._t < 0.5) return;
+    const step = this._t; this._t = 0;
+    const ld = Number.isFinite(s.lakeDist) ? s.lakeDist : 999;
+    if (!this.g?.ui?.showCatch?.__fg) this.hook(); // UI may be created after the guide
+    const inv = this.g?.state?.inv;
+    if (inv) {
+      if (this._inv) { if (inv.mushroom > this._inv.m) this.gathered('mushroom'); if (inv.berry > this._inv.b) this.gathered('berry'); }
+      this._inv = { m: inv.mushroom || 0, b: inv.berry || 0 };
+    }
+    // walking far enough through the forest (not standing at camp) reveals the three trees one after another
+    this._walk = (this._walk || 0) + (this._lx !== undefined ? Math.min(3, Math.hypot(s.x - this._lx, s.z - this._lz)) : 0);
+    this._lx = s.x; this._lz = s.z;
+    if (this._walk > 25) this.unlock('spruce');
+    if (this._walk > 80) this.unlock('pine');
+    if (ld < 12 && this._walk > 10) this.unlock('birch');
+    if (ld > -1 && ld < 4) { this._shore = (this._shore || 0) + step; if (this._shore > 6) this.unlock('waterlily'); }
+    if (ld > 6 && this._walk > 40) this.unlock('fern');
+    if (s.night > 0.7 && (s.rain || 0) < 0.3 && ld < 25) { this._ff = (this._ff || 0) + step; if (this._ff > 8) this.unlock('firefly'); }
+  }
+
+  // audio.js reports which animal just called (AudioEngine.onCall)
+  heard(kind) {
+    const id = { owl: 'owl', loon: 'loon', woodpecker: 'woodpecker', uguisu: 'uguisu' }[kind];
+    if (!id) return;
+    this._heard = this._heard || {};
+    this._heard[id] = (this._heard[id] || 0) + 1;
+    if (this._heard[id] >= 2) this.unlock(id); // 2nd call: the player has had time to notice it
+  }
+
+  // world pickups: mushroom kinds are random per pick (porcini / chanterelle), berries -> bilberry
+  gathered(type) {
+    if (type === 'mushroom') this.unlock(this.data.seen.porcini && !this.data.seen.chanterelle ? 'chanterelle' : (Math.random() < 0.5 ? 'porcini' : 'chanterelle'));
+    else if (type === 'berry') this.unlock('bilberry');
+  }
 
   unlock(id, quiet = false) {
     const e = GUIDE.find((x) => x.id === id);
