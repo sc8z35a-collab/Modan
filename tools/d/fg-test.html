@@ -1,0 +1,17 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><link rel="stylesheet" href="/src/ui/style.css"></head>
+<body style="background:#223">
+<script type="module">
+// DOM-only harness for the field guide (no WebGL): /tools/d/fg-test.html?open=1&detail=rainbow
+import { FieldGuide, GUIDE } from '/src/ui/fieldguide.js';
+localStorage.clear();
+const toasts = [];
+const game = { ui: { toast: (m) => toasts.push(m), showCatch() {} }, input: { reset() {} }, audio: { click() {} }, state: { inv: { mushroom: 0, berry: 0 } } };
+const fg = new FieldGuide(game);
+const q = new URLSearchParams(location.search);
+for (const e of GUIDE) if (e.id !== 'brown' && e.id !== 'waterlily' && e.id !== 'owl') fg.unlock(e.id, true);
+game.ui.showCatch({ name: 'ニジマス', size: 47 });
+fg.open();
+if (q.get('cat')) { fg.cat = q.get('cat'); fg.render(); }
+if (q.get('detail')) setTimeout(() => fg.showDetail(q.get('detail')), 300);
+window.__fg = { fg, toasts, paused: game.paused };
+</script></body></html>

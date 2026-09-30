@@ -130,6 +130,7 @@ export function buildTerrain(textures, maxAniso) {
     splat.set(c, i * 4);
   }
   geo.setAttribute('splat', new THREE.BufferAttribute(splat, 4));
+  geo.setAttribute('canopy', new THREE.BufferAttribute(new Float32Array(pos.count), 1)); // filled by World.buildCanopy()
   geo.computeBoundingSphere();
 
   const layerIds = ['aerial_grass_rock', 'forest_ground_04', 'rocky_terrain_02', 'coast_sand_rocks_02'];
@@ -156,12 +157,12 @@ export function buildTerrain(textures, maxAniso) {
     Object.assign(sh.uniforms, uniforms);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
-        attribute vec4 splat; varying vec4 vSplat; varying vec3 vWPos; varying vec3 vWNrm;`)
+        attribute vec4 splat; attribute float canopy; varying vec4 vSplat; varying vec3 vWPos; varying vec3 vWNrm; varying float vCanopy;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        vSplat = splat; vWPos = (modelMatrix * vec4(transformed,1.0)).xyz; vWNrm = normalize(mat3(modelMatrix) * objectNormal);`);
+        vSplat = splat; vCanopy = canopy; vWPos = (modelMatrix * vec4(transformed,1.0)).xyz; vWNrm = normalize(mat3(modelMatrix) * objectNormal);`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        varying vec4 vSplat; varying vec3 vWPos; varying vec3 vWNrm;
+        varying vec4 vSplat; varying vec3 vWPos; varying vec3 vWNrm; varying float vCanopy;
         uniform sampler2D tD0,tD1,tD2,tD3,tN0,tN1,tN2,tN3,tA0,tA1,tNoise; uniform float uWet;
         vec3 gTN; float gRough; float gAO;
         // stochastic-ish anti tiling: blend two rotated/offset samples by noise
@@ -209,12 +210,18 @@ export function buildTerrain(textures, maxAniso) {
         float wet = smoothstep(0.9, 0.05, vWPos.y) * (1.0 - w.z*0.5);
         wet = max(wet, uWet*0.6);
         alb *= mix(1.0, 0.55, wet);
+        // under the tree crowns: rust-brown needle litter + contact shade (the shadow map alone is too soft/coarse)
+        float cn = clamp(vCanopy, 0.0, 1.0) * (1.0 - wet);
+        float needles = smoothstep(0.3, 0.7, micro + cn * 0.5);
+        alb = mix(alb, alb * vec3(1.12, 0.86, 0.62), cn * needles * 0.7);
+        alb *= 1.0 - cn * 0.28;
         diffuseColor.rgb *= alb;
 
         vec4 a0 = texture2D(tA0, uvG), a1 = texture2D(tA1, uvF);
         gAO = mix(1.0, a0.r, w.x) * mix(1.0, a1.r, w.y);
         gRough = a0.g*w.x + a1.g*w.y + 0.85*w.z + 0.9*w.w;
         gRough = mix(gRough, 0.18, wet*0.85);
+        gAO *= 1.0 - clamp(vCanopy, 0.0, 1.0) * 0.35;
 
         vec3 n0 = unpackN(tsample(tN0, uvG, k)), n1 = unpackN(tsample(tN1, uvF, k));
         vec3 n2 = unpackN(texture2D(tN2, rt > 0.5 ? uvRt : uvR)), n3 = unpackN(tsample(tN3, uvS, k));

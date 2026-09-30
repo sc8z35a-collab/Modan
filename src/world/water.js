@@ -67,12 +67,13 @@ export class Water {
       uWorld: { value: worldData.tex }, uWorldRes: { value: worldData.res }, uWorldSize: { value: worldData.size },
       uRipples: { value: this.ripples },
       uFireCol: { value: new THREE.Color(0, 0, 0) }, uFirePos: { value: new THREE.Vector3() },
+      uRain: { value: 0 }, uWindDir: { value: new THREE.Vector2(0.6, 0.3) },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       transparent: true,
       vertexShader: /* glsl */`
-        uniform mat4 uTexMatrix; varying vec4 vRUV; varying vec3 vW; varying float vFog;
+        uniform mat4 uTexMatrix; varying vec4 vRUV; varying vec3 vW; varying float vFog; varying float vLensMag;
         void main(){
           vec4 w = modelMatrix * vec4(position,1.0);
           vW = w.xyz;
@@ -80,14 +81,32 @@ export class Water {
           vec4 mv = viewMatrix * w;
           vFog = -mv.z;
           gl_Position = projectionMatrix * mv;
+          vLensMag = max(projectionMatrix[1][1] / 1.6, 1.0); // projectionMatrix only exists in the vertex stage
         }`,
       fragmentShader: /* glsl */`
         precision highp float;
         ${WORLD_DATA_GLSL}
         uniform float uTime; uniform sampler2D tReflect, tNormal;
         uniform vec3 uSunDir, uSunCol, uShallow, uDeep, uFogCol, uFirePos; uniform vec3 uFireCol;
-        uniform float uFogDensity, uNight; uniform vec4 uRipples[8];
-        varying vec4 vRUV; varying vec3 vW; varying float vFog;
+        uniform float uFogDensity, uNight, uRain; uniform vec4 uRipples[8]; uniform vec2 uWindDir;
+        varying vec4 vRUV; varying vec3 vW; varying float vFog; varying float vLensMag;
+        float h21(vec2 q){ return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+        // raindrop rings: one drop per cell per cycle, random position/phase; returns the ring slope (xz)
+        vec2 rainRings(vec2 q, float t){
+          vec2 g = vec2(0.0);
+          for (int l = 0; l < 2; l++) {
+            vec2 cq = q * (l == 0 ? 2.1 : 3.3) + float(l) * 17.3;
+            vec2 id = floor(cq), f = fract(cq) - 0.5;
+            float h = h21(id + float(l) * 3.1);
+            float ph = fract(t * (0.8 + h * 0.5) + h * 7.0);
+            vec2 o = (vec2(h21(id + 1.7), h21(id + 9.2)) - 0.5) * 0.5;
+            vec2 dv = f - o; float d = length(dv);
+            float R = ph * 0.45;
+            float ring = sin((d - R) * 42.0) * smoothstep(0.07, 0.0, abs(d - R)) * (1.0 - ph) * (1.0 - ph);
+            g += dv / max(d, 1e-3) * ring;
+          }
+          return g;
+        }
         void main(){
           float ground = worldData(vW.xz).r;
           float depth = max(vW.y - ground, 0.0);
@@ -106,18 +125,29 @@ export class Water {
             float ring = sin((d - front) * 9.0) * exp(-abs(d-front)*3.0) * exp(-age*1.1) * r.w;
             n.xz += normalize(dv+1e-4) * ring * 0.6;
           }
+          // rain: the whole surface is covered by expanding drop rings
+          if (uRain > 0.02) n.xz += rainRings(p, uTime) * 0.35 * uRain * smoothstep(90.0, 10.0, vFog);
           n = normalize(n);
           vec3 V = normalize(cameraPosition - vW);
           float fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
-          vec2 ruv = vRUV.xy / vRUV.w + n.xz * 0.045;
+          // reflection distortion is a screen-space offset: at 20x a 0.045 offset spans 20x more of the scene and
+          // shreds the reflection into streaks -> scale it with the lens magnification (projectionMatrix[1][1])
+          vec2 ruv = vRUV.xy / vRUV.w + n.xz * 0.045 / vLensMag;
           vec3 refl = texture2D(tReflect, ruv).rgb;
           // absorption
-          float a = 1.0 - exp(-depth * 0.8);
+          // gentler absorption in the first metre: the lake bed drops ~0.7m within 1m of the shore, so a linear
+          // Beer-Lambert curve gave almost no visible shallows (reported by C)
+          float a = 1.0 - exp(-pow(depth, 1.35) * 0.62);
           vec3 body = mix(uShallow, uDeep, a) * (1.0 - uNight*0.9);
           // subsurface-ish scatter
           body += vec3(0.03,0.045,0.02) * max(uSunDir.y,0.0) * (1.0 - a);
           // pebbly lakebed visible through clear shallows
           body *= mix(0.75, 1.15, texture2D(tNormal, p*0.9 + n.xz*0.05).g) * (1.0 - a) + a;
+          // sunlit caustics dancing on the shallow lakebed (two scrolling normal-map taps interfering)
+          float c1 = texture2D(tNormal, p*0.55 + vec2(uTime*0.021, uTime*0.013)).r;
+          float c2 = texture2D(tNormal, p*0.71 - vec2(uTime*0.017, -uTime*0.024)).g;
+          float caus = pow(clamp(1.0 - abs(c1 - c2) * 3.2, 0.0, 1.0), 7.0);
+          body += vec3(0.55, 0.62, 0.45) * caus * max(uSunDir.y, 0.0) * (1.0 - uNight) * (1.0 - a) * smoothstep(1.4, 0.15, depth) * (1.0 - uRain * 0.8) * 0.35;
           // reflections of a forest shore are slightly darker than the sky they mirror
           vec3 col = mix(body, refl * 0.92, clamp(fres * 1.15 + 0.04, 0.0, 1.0));
           // sun specular
@@ -129,8 +159,16 @@ export class Water {
           col += uFireCol * pow(max(dot(n,H2),0.0), 200.0) * 4.0 / (1.0 + length(uFirePos - vW)*0.05);
           // shore foam
           float foamN = texture2D(tNormal, p*0.6 + uTime*0.02).r;
-          float foam = smoothstep(0.35, 0.0, depth) * smoothstep(0.35, 0.75, foamN + 0.25*sin(uTime*1.3 + depth*20.0));
-          col = mix(col, vec3(0.85,0.9,0.9)*(1.0-uNight*0.85), foam*0.55);
+          float foamN2 = texture2D(tNormal, p*1.9 - uTime*0.035).b;
+          // lapping line: a thin band that washes up and back with the waves, plus lacy bubbles behind it
+          float wash = 0.12 + 0.07 * sin(uTime*1.1 + p.x*0.35 + p.y*0.27);
+          float line = smoothstep(0.05, 0.0, abs(depth - wash)) * smoothstep(0.3, 0.6, foamN2);
+          float lace = smoothstep(0.35, 0.0, depth) * smoothstep(0.35, 0.75, foamN + 0.25*sin(uTime*1.3 + depth*20.0)) * smoothstep(0.25, 0.6, foamN2);
+          float foam = max(line * 0.9, lace * 0.7);
+          col = mix(col, vec3(0.85,0.9,0.9)*(1.0-uNight*0.85), foam*0.6);
+          // wind streaks ("cat's paws"): darker rougher bands drifting over the open water
+          float streak = smoothstep(0.55, 0.8, texture2D(tNormal, vec2(dot(p, uWindDir), dot(p, vec2(-uWindDir.y, uWindDir.x))) * vec2(0.012, 0.05) + uTime*0.004).r);
+          col *= 1.0 - streak * 0.12 * smoothstep(1.0, 6.0, depth) * (1.0 - uNight*0.5);
           float alpha = smoothstep(0.0, 0.22, depth);
           alpha = clamp(max(alpha*0.92, fres) , 0.0, 1.0);
           // fog
@@ -152,6 +190,7 @@ export class Water {
   }
 
   addRipple(x, z, strength = 1) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return; // a NaN ripple made the whole lake shader output NaN (black)
     const r = this.ripples[this.rippleIdx];
     this.rippleIdx = (this.rippleIdx + 1) % this.ripples.length;
     r.set(x, z, this.uniforms.uTime.value, strength);
@@ -159,8 +198,14 @@ export class Water {
 
   resize(w, h) {
     // keep aspect ratio of the screen (clamping each axis separately to 256 distorted reflections on tiny windows)
+    if (!(w > 0 && h > 0)) return; // 0x0 while the tab is hidden / NaN from a torn-down visualViewport
     const k = Math.max(1, 256 / Math.max(1, Math.min(w, h) * this.rtScale));
-    this.rt.setSize(Math.max(1, (w * this.rtScale * k) | 0), Math.max(1, (h * this.rtScale * k) | 0));
+    // cap the long side (4K / ultrawide at pixelRatio 2 asked for 5000+ px reflection targets -> >maxTextureSize
+    // on many phones = incomplete framebuffer, black lake) while keeping the aspect ratio
+    const cap = Math.min(2048, this.renderer.capabilities?.maxTextureSize || 2048);
+    let rw = w * this.rtScale * k, rh = h * this.rtScale * k;
+    const over = Math.max(rw, rh) / cap; if (over > 1) { rw /= over; rh /= over; }
+    this.rt.setSize(Math.max(1, rw | 0), Math.max(1, rh | 0));
   }
 
   update(dt, sky, fire) {
@@ -172,7 +217,14 @@ export class Water {
     u.uFogDensity.value = this.scene.fog.density;
     u.uNight.value = sky.info.night;
     if (fire) { u.uFirePos.value.copy(fire.position); u.uFireCol.value.copy(fire.glintColor); }
+    // rain: explicit setRain() wins; otherwise derive it from the sky's cloud cover (main.js drives
+    // uCloud = 0.35 + rain * 0.55), so the lake reacts to rain without extra wiring
+    const r = this.rain ?? Math.max(0, Math.min(1, (sky.uniforms.uCloud.value - 0.35) / 0.55));
+    u.uRain.value = r;
   }
+
+  setRain(r) { this.rain = Number.isFinite(r) ? r : undefined; }
+  setWind(w) { if (w) { const l = Math.hypot(w.x, w.y) || 1; this.uniforms.uWindDir.value.set(w.x / l, w.y / l); } }
 
   // render mirrored scene into reflection RT (call before main render)
   renderReflection(hide = []) {
@@ -210,6 +262,9 @@ export class Water {
       .multiply(pm).multiply(m.matrixWorldInverse);
 
     this.mesh.visible = false;
+    // extra objects that must not be mirrored (rain splashes, dust motes, leaves: camera-relative particles)
+    const xh = this.extraHide, xv = this._xv || (this._xv = []);
+    if (xh) for (let i = 0; i < xh.length; i++) { xv[i] = xh[i].visible; xh[i].visible = false; }
     const vis = hide.map((o) => { const v = o.visible; o.visible = false; return v; });
     const shadowAuto = r.shadowMap.autoUpdate; r.shadowMap.autoUpdate = false;
     const prevTM = r.toneMapping; r.toneMapping = THREE.NoToneMapping;
@@ -220,6 +275,7 @@ export class Water {
     r.toneMapping = prevTM;
     r.shadowMap.autoUpdate = shadowAuto;
     hide.forEach((o, i) => (o.visible = vis[i]));
+    if (xh) for (let i = 0; i < xh.length; i++) xh[i].visible = xv[i];
     this.mesh.visible = true;
   }
 }

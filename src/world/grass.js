@@ -14,6 +14,7 @@ export class Grass {
       tNoise: { value: noiseTex },
       uWind: { value: new THREE.Vector2(0.8, 0.35) },
       uNight: { value: 0 },
+      uZoom: { value: 1 }, // lens magnification: far blades are only widened by their ON-SCREEN distance (dist / zoom)
     };
     this.baseDensity = Math.max(1e-3, density);
     this.layers = [];
@@ -54,9 +55,9 @@ export class Grass {
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
           ${WORLD_DATA_GLSL}
-          attribute vec4 aOff; uniform float uSize, uScale, uTime; uniform vec3 uCam, uPlayer; uniform vec2 uWind;
+          attribute vec4 aOff; uniform float uSize, uScale, uTime; uniform vec3 uCam, uPlayer; uniform vec2 uWind; uniform float uZoom;
           uniform sampler2D tNoise;
-          varying float vT; varying vec3 vTint; varying float vAO; varying vec3 vWP;
+          varying float vT; varying vec3 vTint; varying float vAO; varying vec3 vWP; varying float vX;
           mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
         `)
         .replace('#include <beginnormal_vertex>', `
@@ -69,13 +70,16 @@ export class Grass {
           float dens = wd.g;
           float keep = step(aOff.z, dens) * fade;
           float nz = texture2D(tNoise, base*0.02).r;
-          float hgt = (0.28 + aOff.w*0.5 + nz*0.45) * uScale * mix(1.0, 0.55, wd.b) * keep;
+          // shorter on average with more patch variation (grazed/trampled lawns next to tall tussocks): the old 0.28-1.2m
+          // everywhere hid every flower and pebble at eye level
+          float tuss = smoothstep(0.35, 0.75, texture2D(tNoise, base*0.045 + 7.0).g);
+          float hgt = (0.16 + aOff.w*0.36 + nz*0.3 + tuss*0.35) * uScale * mix(1.0, 0.5, wd.b) * keep;
           float ang = aOff.z * 43.7;
           vec3 objectNormal = vec3(sin(ang), 0.0, cos(ang));
         `)
         .replace('#include <begin_vertex>', `
           float t = position.y; vT = t;
-          float width = 0.055 * uScale * (0.7 + aOff.w*0.6) * mix(1.0, 1.6, smoothstep(10.0, 40.0, dist));
+          float width = 0.055 * uScale * (0.7 + aOff.w*0.6) * mix(1.0, 1.6, smoothstep(10.0, 40.0, dist / max(uZoom, 1.0)));
           vec3 p = vec3(position.x * width, 0.0, 0.0);
           p.xz = rot(ang) * p.xz;
           // curvature + wind
@@ -95,10 +99,16 @@ export class Grass {
           float patchv = texture2D(tNoise, base*0.004).r;
           vTint = mix(mix(lush, fresh, aOff.w), dry, smoothstep(0.45, 0.8, patchv) * 0.8 + wd.b*0.3);
           vTint = mix(vTint, vTint*1.35 + vec3(0.03,0.03,0.0), t*t);
+          // ~6% of blades are dead straw (every real meadow has them), a few have reddish tips (autumn / stress)
+          float h2 = fract(aOff.z * 91.7 + aOff.w * 13.3);
+          vTint = mix(vTint, vec3(0.46, 0.40, 0.24) * (0.8 + aOff.w*0.4), step(h2, 0.06));
+          vTint = mix(vTint, vTint * vec3(1.25, 0.85, 0.7), step(0.94, h2) * t);
+          vX = position.x;
           vAO = mix(0.35, 1.0, t);
         `)
         .replace('#include <defaultnormal_vertex>', `
-          vec3 nrm = normalize(mix(objectNormal, vec3(0.0,1.0,0.0), 0.55));
+          vec3 side = vec3(cos(ang), 0.0, -sin(ang));
+          vec3 nrm = normalize(mix(objectNormal + side * position.x * 0.9, vec3(0.0,1.0,0.0), 0.5));
           vec3 transformedNormal = normalMatrix * nrm;
         `)
         .replace('#include <project_vertex>', `
@@ -108,8 +118,8 @@ export class Grass {
         .replace('#include <worldpos_vertex>', `vec4 worldPosition = vec4(transformed, 1.0);`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
-          varying float vT; varying vec3 vTint; varying float vAO; varying vec3 vWP; uniform float uNight;`)
-        .replace('#include <map_fragment>', `diffuseColor.rgb = vTint;`)
+          varying float vT; varying vec3 vTint; varying float vAO; varying vec3 vWP; varying float vX; uniform float uNight;`)
+        .replace('#include <map_fragment>', `diffuseColor.rgb = vTint * (0.9 + 0.18 * smoothstep(0.0, 0.5, abs(vX)) - 0.08 * (1.0 - smoothstep(0.0, 0.08, abs(vX))));`)
         .replace('#include <aomap_fragment>', `
           reflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(0.55, 1.0, vAO);
           // translucency toward light
@@ -128,8 +138,9 @@ export class Grass {
     return mesh;
   }
 
-  update(dt, camPos, playerPos, night, wind) {
+  update(dt, camPos, playerPos, night, wind, zoom = 1) {
     const u = this.uniforms;
+    u.uZoom.value = zoom;
     if (wind) u.uWind.value.copy(wind); // grass used a constant wind and ignored the world's gusts
     u.uTime.value += dt;
     u.uCam.value.copy(camPos);

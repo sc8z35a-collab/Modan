@@ -5,12 +5,15 @@ import {
   DepthOfFieldEffect, NoiseEffect, BlendFunction,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
+import { Lens } from './lens.js';
 
 export const QUALITY = {
   ultra: { pixelRatio: 2.0, shadow: 4096, ao: true, aoHalf: false, grass: 1.0, trees: 1.0, water: 0.6, bloom: true, smaa: true },
   high: { pixelRatio: 1.6, shadow: 2048, ao: true, aoHalf: true, grass: 0.7, trees: 0.8, water: 0.5, bloom: true, smaa: true },
   // QA-only profile for headless CI in a 1GB sandbox (never used on device)
   qa: { pixelRatio: 1.0, shadow: 1024, ao: true, aoHalf: true, grass: 0.25, trees: 0.35, water: 0.3, bloom: true, smaa: true, texMax: 256 },
+  // QA-lite: logic/UI probes of the FULL game inside the 1GB SwiftShader sandbox (qa still OOMs there)
+  qalite: { pixelRatio: 0.5, shadow: 512, ao: false, aoHalf: true, grass: 0.02, trees: 0.08, water: 0.15, bloom: true, smaa: false, texMax: 128 },
   medium: { pixelRatio: 1.25, shadow: 2048, ao: false, aoHalf: true, grass: 0.45, trees: 0.6, water: 0.35, bloom: true, smaa: false },
 };
 
@@ -32,6 +35,8 @@ export class Renderer {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.08, 2600);
     this.scene.add(this.camera);
+    // ultra-wide 0.5x / optical 20x / digital 2x (owns camera.fov; resize() only sets its 1x base FOV)
+    this.lens = new Lens(this.camera);
     this.maxAniso = r.capabilities.getMaxAnisotropy();
     this.photoMode = false;
     this._resize = () => this.resize();
@@ -79,7 +84,36 @@ export class Renderer {
     const effects = [this.bloom, this.tone, this.grade, this.bc, this.vignette, grain];
     composer.addPass(new EffectPass(camera, ...effects));
     if (q.smaa) composer.addPass(new EffectPass(camera, new SMAAEffect({ preset: SMAAPreset.HIGH })));
+    // lens pass LAST (digital crop must upscale the anti-aliased image). It is disabled at exactly 1x; a disabled
+    // last pass would leave the previous pass rendering into an off-screen buffer (black screen), so the
+    // renderToScreen flag is handed over explicitly in setLensActive().
+    this.lensPrev = composer.passes[composer.passes.length - 1];
+    this.lensPass = new EffectPass(camera, this.lens.effect);
+    composer.addPass(this.lensPass);
+    this._lensOn = null;
+    this.setLensActive(false);
+    // QA: ?nopass=ao,dof,fx,smaa,lens disables individual passes to bisect rendering problems
+    const off = (new URLSearchParams(location.search).get('nopass') || '').split(',');
+    const tag = { ao: this.ao, dof: this.dofPass, lens: this.lensPass };
+    for (const k of off) if (tag[k]) tag[k].enabled = false;
     this.resize();
+  }
+
+  setLensActive(on) {
+    if (this._lensOn === on || !this.lensPass) return;
+    this._lensOn = on;
+    this.lensPass.enabled = on; this.lensPass.renderToScreen = on;
+    this.lensPrev.renderToScreen = !on;
+  }
+
+  // per-frame: smooth zoom, enable the lens pass only when it does something
+  updateLens(dt) {
+    this.lens.update(dt);
+    const z = this.lens.zoom;
+    // DOF depth follows the focal length (compare against the zoom the DOF was set up for: instant setZoom()
+    // calls don't register as "changed" in the smoother)
+    if (this.photoMode && z !== this._dofZoom) this.setPhotoMode(true, this.focusDist);
+    this.setLensActive(Math.abs(z - 1) > 1e-3);
   }
 
   setQuality(name) {
@@ -100,7 +134,11 @@ export class Renderer {
     if (on) {
       const coc = this.dof.cocMaterial;
       coc.focusDistance = focusDist;
-      coc.focusRange = Math.max(1.2, focusDist * 0.35);
+      // longer focal length = shallower depth of field (DoF ~ 1/f^2 at a fixed subject distance)
+      this._dofZoom = this.lens.zoom;
+      const z = Math.max(0.5, this.lens.zoom);
+      coc.focusRange = Math.max(0.25, focusDist * 0.35 / Math.pow(z, 0.8));
+      this.dof.bokehScale = Math.min(6, 3.2 * Math.pow(z, 0.25));
     }
   }
 
@@ -111,8 +149,8 @@ export class Renderer {
     this.r.setSize(w, h, false);
     this.camera.aspect = w / h;
     // wider FOV in landscape phones feels more natural
-    this.camera.fov = w / h > 1.9 ? 64 : 70;
-    this.camera.updateProjectionMatrix();
+    this.lens.setBaseFov(w / h > 1.9 ? 64 : 70);
+    this.lens.apply(true);
     this.composer?.setSize(w, h, false);
   }
 

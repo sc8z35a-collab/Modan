@@ -13,7 +13,9 @@
     "agents:watch": "node tools/agents/orchestrator.mjs --watch --skip-build",
     "agents:fast": "node tools/agents/orchestrator.mjs --skip-build",
     "qa": "node tools/qa-server.mjs",
-    "autosave": "tools/autosave.sh 120"
+    "autosave": "tools/autosave/ensure.sh",
+    "autosave:status": "tools/autosave/status.sh",
+    "hub": "tools/hub/hub.sh"
   },
   "repository": {
     "type": "git",

@@ -33,12 +33,16 @@ void main(){
   float body = shape * (1.0 - uv.y) ;
   float f = body * 1.7 - (n*0.75 + n2*0.35) * (0.35 + uv.y*1.3);
   f = clamp(f * uIntensity, 0.0, 1.0);
-  vec3 c1 = vec3(1.0, 0.95, 0.75) * 7.0; // core
-  vec3 c2 = vec3(1.0, 0.45, 0.08) * 4.2;
-  vec3 c3 = vec3(0.6, 0.08, 0.01) * 1.4;
+  // core was x7 -> with 7 additive layers + night bloom the whole flame burned out to a white blob;
+  // keep the core hot but let the orange tongues and their noise structure survive tone mapping
+  vec3 c1 = vec3(1.0, 0.86, 0.55) * 2.6; // core
+  vec3 c2 = vec3(1.0, 0.42, 0.07) * 1.9;
+  vec3 c3 = vec3(0.6, 0.08, 0.01) * 0.9;
   vec3 col = mix(c3, c2, smoothstep(0.05, 0.4, f));
   col = mix(col, c1, smoothstep(0.55, 0.95, f));
   float alpha = smoothstep(0.02, 0.25, f);
+  // thin blue base where the gas burns cleanly just above the logs
+  col += vec3(0.05, 0.12, 0.5) * smoothstep(0.12, 0.0, uv.y) * smoothstep(0.7, 0.2, abs(uv.x)) * 1.5;
   gl_FragColor = vec4(col * alpha, alpha);
 }`;
 
@@ -120,8 +124,8 @@ export class Campfire {
       uniforms: { uTex: { value: makeSoftTexture() }, uPR: this.prU },
       // point size follows the renderer pixel ratio (was baked from devicePixelRatio, wrong on medium/high quality)
       // and is clamped (points at/behind the camera produced negative or huge sizes)
-      vertexShader: `attribute float aLife; uniform float uPR; varying float vL; void main(){ vL=aLife; vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = clamp((6.0 + aLife*8.0) * (6.0 / max(-mv.z, 0.05)) * uPR, 0.0, 128.0); gl_Position = projectionMatrix*mv; }`,
-      fragmentShader: `uniform sampler2D uTex; varying float vL; void main(){ float a = texture2D(uTex, gl_PointCoord).a * smoothstep(0.0,0.3,vL); if(vL<=0.0) discard; gl_FragColor = vec4(vec3(1.0,0.55,0.15)*6.0*a, a); }`,
+      vertexShader: `attribute float aLife; uniform float uPR; varying float vL; void main(){ vL=aLife; vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = clamp((6.0 + aLife*8.0) * (6.0 / max(-mv.z, 0.05)) * (projectionMatrix[1][1] * 0.7002) * uPR, 0.0, 64.0 * uPR); gl_Position = projectionMatrix*mv; }`,
+      fragmentShader: `uniform sampler2D uTex; varying float vL; void main(){ float a = texture2D(uTex, gl_PointCoord).a * smoothstep(0.0,0.3,vL); if(vL<=0.0) discard; vec3 c = mix(vec3(0.9,0.18,0.03), mix(vec3(1.0,0.55,0.15), vec3(1.0,0.9,0.6), smoothstep(0.9,1.8,vL)), smoothstep(0.05,0.6,vL)); gl_FragColor = vec4(c*6.0*a, a); }`,
     }));
     this.sparkMesh.frustumCulled = false;
     this.group.add(this.sparkMesh);
@@ -137,15 +141,48 @@ export class Campfire {
     }
 
     // ember bed glow (emissive disk)
-    this.embers = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    // coal bed: voronoi coals with glowing cracks under an ash crust; each coal "breathes" on its own
+    this.emberU = { uTime: { value: 0 }, uEmb: { value: 0 }, uWind: { value: 0 } };
+    this.embers = new THREE.Mesh(new THREE.CircleGeometry(0.42, 32), new THREE.ShaderMaterial({
+      uniforms: this.emberU, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      vertexShader: `varying vec2 vP; void main(){ vP = position.xy / 0.42; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `varying vec2 vP; uniform float uTime, uEmb, uWind;
+        vec2 h2(vec2 p){ p = vec2(dot(p, vec2(127.1,311.7)), dot(p, vec2(269.5,183.3))); return fract(sin(p)*43758.5453); }
+        void main(){
+          float r = length(vP); if (r > 1.0) discard;
+          vec2 q = vP * 5.5; vec2 i = floor(q), f = fract(q);
+          float d1 = 9.0, d2 = 9.0; vec2 cid = vec2(0.0);
+          for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(float(x), float(y)); vec2 o = h2(i + g);
+            float d = length(g + o - f);
+            if (d < d1) { d2 = d1; d1 = d; cid = i + g; } else if (d < d2) d2 = d;
+          }
+          float crack = smoothstep(0.12, 0.0, d2 - d1);            // gaps between coals glow hottest
+          float seed = h2(cid).x;
+          float breathe = 0.55 + 0.45 * sin(uTime * (0.7 + seed * 1.6) + seed * 40.0 + uWind * 3.0);
+          float coal = smoothstep(0.9, 0.2, d1) * breathe * (0.35 + 0.65 * seed);
+          float heat = (crack * 1.2 + coal * 0.7) * smoothstep(1.0, 0.35, r);
+          heat *= uEmb;
+          vec3 col = mix(vec3(0.6, 0.05, 0.0), vec3(1.0, 0.42, 0.06), smoothstep(0.2, 0.8, heat));
+          col = mix(col, vec3(1.0, 0.85, 0.5), smoothstep(0.9, 1.4, heat));
+          float a = clamp(heat, 0.0, 1.0);
+          gl_FragColor = vec4(col * heat * 2.4, a);
+        }`,
+    }));
     this.embers.rotation.x = -Math.PI / 2; this.embers.position.y = 0.06;
     this.group.add(this.embers);
+
+    // glow halo: light scattered by the smoke/air around the flames (soft additive sprite, picked up by bloom)
+    this.halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.sparkMesh.material.uniforms.uTex.value, color: 0xff7a2a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+    this.halo.position.y = 0.9; this.halo.scale.set(4.2, 3.6, 1); this.halo.renderOrder = 18;
+    this.group.add(this.halo);
   }
 
   // a few sparks from the ferro rod, even while the fire is not lit
   sparkBurst(n = 6) { this.burst = (this.burst || 0) + n; }
 
-  addFuel(v) { this.fuel = Math.min(1.2, Math.max(0, this.fuel + v)); }
+  addFuel(v) { if (Number.isFinite(v)) this.fuel = Math.min(1.2, Math.max(0, this.fuel + v)); }
   ignite() { if (this.fuel > 0.05) this.lit = true; return this.lit; }
   setPixelRatio(pr) { this.prU.value = pr; }
   // resizing mapSize has no effect once the shadow map exists -> dispose it so it is recreated
@@ -156,6 +193,10 @@ export class Campfire {
   }
 
   update(dt, wind = this._wind, rain = 0) {
+    // a single NaN dt / wind / rain permanently poisoned fuel + intensity (fire stuck NaN = invisible, light NaN)
+    if (!Number.isFinite(dt) || dt < 0) dt = 0;
+    if (!Number.isFinite(rain)) rain = 0;
+    if (!wind || !Number.isFinite(wind.x) || !Number.isFinite(wind.y)) wind = this._wind;
     this.time += dt;
     if (this.lit) {
       this.fuel -= dt * (1 / 600) * (1 + rain * 2); // ~10 min real time per full load
@@ -180,7 +221,12 @@ export class Campfire {
     this.heat = this.lit ? 1 : Math.max(0, this.heat - dt / 180);
     // freshly stacked, never-lit wood used to glow like embers
     const emb = Math.max(I, this.lit ? 0 : Math.min(0.25, this.fuel) * 0.5 * this.heat);
-    this.embers.material.color.setRGB(1.0 * emb * 2.2, 0.28 * emb * 2.2, 0.04 * emb);
+    this.emberU.uEmb.value = emb * (0.85 + 0.15 * flick);
+    this.emberU.uTime.value = this.time;
+    this.emberU.uWind.value = Math.sin(this.time * 0.5) * Math.hypot(wind.x, wind.y); // gusts fan the coals
+    this.embers.visible = emb > 0.003;
+    this.halo.material.opacity = I * 0.05 * flick; // subtle: the flame + bloom already saturate the core
+    this.halo.visible = I > 0.02;
 
     // sparks
     const sp = this.sparks, v = this.sparkVel, L = this.sparkLife;
@@ -225,6 +271,10 @@ export class Campfire {
       s.scale.set(sc, sc, sc);
       u.rot += dt * 0.2; s.material.rotation = u.rot;
       s.material.opacity = (u.a || 0) * Math.sin(Math.PI * Math.min(1, t * 1.2)) * 0.32;
+      // young puffs are lit from below by the flames; smoke from a dying / rained-on fire is whiter and thicker
+      const glow = I * Math.max(0, 1 - t * 2.5), wet = Math.max(rain, this.lit ? 0 : 0.6);
+      const g0 = 0.47 + wet * 0.25;
+      s.material.color.setRGB(g0 + glow * 0.45, g0 + glow * 0.18, g0 - glow * 0.05);
       s.visible = s.material.opacity > 0.002; // 26 sorted transparent sprites were drawn every frame at opacity 0
     }
     this.smoulder = Math.max(0, this.smoulder - dt * 0.05);
@@ -253,7 +303,9 @@ export class Fireflies {
           p += vec3(sin(t*1.3)*1.6, 0.9 + sin(t*0.9)*0.6 + aSeed*1.2, cos(t*1.1)*1.6);
           vec4 mv = modelViewMatrix*vec4(p,1.0);
           vA = pow(max(sin(uTime*(1.2+aSeed) + aSeed*30.0),0.0), 3.0);
-          gl_PointSize = clamp(18.0 * (4.0 / max(-mv.z, 0.05)) * uPR, 0.0, 128.0);
+          // a firefly drifting right past the lens became a 128px green blob: fade out inside ~1.2m
+          vA *= smoothstep(0.35, 1.2, -mv.z);
+          gl_PointSize = clamp(18.0 * (4.0 / max(-mv.z, 0.05)) * (projectionMatrix[1][1] * 0.7002) * uPR, 0.0, 48.0 * uPR);
           gl_Position = projectionMatrix*mv; }`,
       fragmentShader: `uniform sampler2D uTex; uniform float uAmt; varying float vA;
         void main(){ float a = texture2D(uTex, gl_PointCoord).a * vA * uAmt; gl_FragColor = vec4(vec3(0.75,1.0,0.3)*5.0*a, a); }`,

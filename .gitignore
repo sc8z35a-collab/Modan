@@ -5,3 +5,11 @@ dist/
 .env
 .agents/shots/
 assets-src/models/*/textures
+.hub/
+.agent-id
+.agents/autosave.log
+.agents/autosave.heartbeat
+.agents/.inbox-*
+.agents/.pr-*
+tools/.git-lock
+.agents/bg/

@@ -19,11 +19,13 @@ export class Scatter {
     const e = matrix.elements;
     const key = Math.floor(e[12] / this.cell) + ',' + Math.floor(e[14] / this.cell);
     if (!k.items.has(key)) k.items.set(key, []);
-    k.items.get(key).push({ m: matrix.clone(), c: color });
+    k.items.get(key).push({ m: matrix.clone(), c: color ? color.clone() : undefined }); // callers reuse one scratch Color
   }
 
   build() {
     for (const [name, k] of this.kinds) {
+      if (k.built) continue; // build() can be called again for kinds defined later (flora) without duplicating
+      k.built = true;
       for (const [key, items] of k.items) {
         const [cx, cz] = key.split(',').map(Number);
         const chunk = {
@@ -35,7 +37,9 @@ export class Scatter {
           const group = [];
           for (const part of lod.parts) {
             const im = new THREE.InstancedMesh(part.geo, part.mat, items.length);
-            items.forEach((it, i) => { im.setMatrixAt(i, it.m); if (it.c) im.setColorAt(i, it.c); });
+            // part.tint === false: this part ignores the per-instance colour (tree colours are meant for foliage;
+            // applying them to the bark as well turned every trunk green-grey)
+            items.forEach((it, i) => { im.setMatrixAt(i, it.m); if (it.c && part.tint !== false) im.setColorAt(i, it.c); });
             im.instanceMatrix.needsUpdate = true;
             if (im.instanceColor) im.instanceColor.needsUpdate = true;
             im.computeBoundingSphere();
@@ -52,13 +56,18 @@ export class Scatter {
     }
   }
 
-  update(camPos, lodBias = 1) {
+  // lodBias > 1 (telephoto lens) only applies to chunks inside the view frustum: off-screen chunks still cast
+  // shadows / get reflected, and promoting all of them to LOD0 at 20x would multiply the shadow-pass cost
+  update(camPos, lodBias = 1, frustum = null) {
+    const sph = this._sph || (this._sph = new THREE.Sphere());
     for (const c of this.chunks) {
       const d = Math.hypot(c.center.x - camPos.x, c.center.z - camPos.z) - this.cell * 0.7;
+      let bias = lodBias;
+      if (bias > 1 && frustum) { sph.center.copy(c.center); sph.radius = this.cell * 0.75 + 30; if (!frustum.intersectsSphere(sph)) bias = 1; }
       let idx = -1;
-      if (d < c.cullDist * lodBias) {
+      if (d < c.cullDist * bias) {
         idx = c.lods.length - 1;
-        for (let i = 0; i < c.lods.length; i++) if (d < c.lods[i].dist * lodBias) { idx = i; break; }
+        for (let i = 0; i < c.lods.length; i++) if (d < c.lods[i].dist * bias) { idx = i; break; }
       }
       if (idx === c.cur) continue;
       c.lods.forEach((l, i) => l.meshes.forEach((m) => (m.visible = i === idx)));
