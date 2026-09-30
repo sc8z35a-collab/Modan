@@ -331,7 +331,8 @@ export class AudioEngine {
       if (this.thunderT <= 0) { this.thunderT = 35 + Math.random() * 60; if (s.rain > 0.7) this.thunder(); }
     }
     // fire: stereo position relative to the listener, hiss of moisture, occasional log-settling thump
-    if (Number.isFinite(s.fireAz)) this.firePan.pan.setTargetAtTime(Math.max(-0.85, Math.min(0.85, Math.sin(s.fireAz))) * Math.min(1, s.fireDist / 3), t, 0.1);
+    // s.firePan: -1 (fire on the left) .. 1 (right); collapses to centre when standing right at the fire
+    if (Number.isFinite(s.firePan)) this.firePan.pan.setTargetAtTime(Math.max(-0.85, Math.min(0.85, s.firePan)) * Math.min(1, s.fireDist / 3), t, 0.1);
     this.fireBed.f.frequency.setTargetAtTime(380 + 260 * s.fireLevel + 80 * Math.sin(t * 1.7), t, 0.2);
     if (fv > 0.05) {
       this.hissT -= dt;
