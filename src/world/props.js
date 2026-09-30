@@ -234,7 +234,7 @@ export function buildFireRing(textures) {
   // (CircleGeometry's centre vertex is shared by every fan triangle: its normal is fine, but the disc was lit as
   // if facing down near the rim because computeVertexNormals on the indexed fan -> force +Y-ish normals)
   { const n = ash.attributes.normal; for (let i = 0; i < n.count; i++) if (n.getY(i) < 0.3) n.setXYZ(i, n.getX(i) * 0.3, 1, n.getZ(i) * 0.3); }
-  B.add(ash, ashMat, null, 0xffffff, { shade: (q, n, c) => { const r = Math.hypot(q.x, q.z) / 0.62; const v = 0.055 - 0.04 * r + (posHash(q.x * 3, 1, q.z * 3, 2) - 0.5) * 0.03; /* linear: the forest ground albedo is only ~0.1, 0.13 read as snow */ c.setRGB(v, v * 0.97, v * 0.94); } });
+  B.add(ash, ashMat, null, 0xffffff, { shade: (q, n, c) => { const r = Math.hypot(q.x, q.z) / 0.62; const v = 0.03 - 0.02 * r + (posHash(q.x * 3, 1, q.z * 3, 2) - 0.5) * 0.02; /* linear: the forest ground albedo is only ~0.1, 0.13 read as snow */ c.setRGB(v, v * 0.97, v * 0.94); } });
   // charcoal chunks + white-ashed ember ends + scorched ground ring
   for (let i = 0; i < 38; i++) {
     const a = rnd() * 6.283, d = Math.sqrt(rnd()) * 0.5, x = Math.cos(a) * d, z = Math.sin(a) * d;
