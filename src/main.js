@@ -17,6 +17,7 @@ import { Interactions } from './game/interactions.js';
 import { ViewModel } from './game/viewmodel.js';
 import { UI } from './ui/ui.js';
 import { LensUI } from './ui/lensui.js';
+import { installLaneD } from './fx/laned.js';
 import { clamp, lerp, smoothstep } from './core/noise.js';
 
 const $ = (id) => document.getElementById(id);
@@ -77,6 +78,7 @@ class Game {
     this.input.onZoomStep = (d) => { if (zoomOk()) lens.step(d); };
     if (params.has('zoom')) lens.setZoom(+params.get('zoom'), true);
     this.interact = new Interactions(this);
+    this.laneD = installLaneD(this); // Lane D: field guide, ambience, weather-aware water/particles, moon phase
     this.input.onAction = () => {
       // ignore actions on the title screen, while the menu is open or in photo mode
       if (!this.started || this.paused || this.photo) return;
@@ -506,6 +508,7 @@ class Game {
     if (this.fire.fuel <= 0.01 && !this.fire.lit) this.fireLogs.visible = false;
     this.fireflies.update(dt, night * (1 - this.rain) * smoothstep(0.3, 0.9, night));
     this.particles.update(dt, this.camera, this.rain);
+    this.laneD?.update(dt);
     this.water.update(dt, this.sky, this.fire);
     this.viewmodel.update(dt, Math.hypot(this.player.vel.x, this.player.vel.z));
     if (this.started) this.interact.update(dt);

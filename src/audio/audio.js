@@ -267,7 +267,7 @@ export class AudioEngine {
 
   update(dt, s) {
     if (!this.enabled || this.ctx.state !== 'running') return;
-    if (this.extra) s = Object.assign({}, s, this.extra); // hours / dusk / firePan from src/fx/laned.js
+    if (this.extra) s = Object.assign(s, this.extra); // (s is a fresh literal from main.js each frame) hours / dusk / firePan from src/fx/laned.js
     const t = this.ctx.currentTime, k = 0.25;
     const windAmt = 0.05 + 0.04 * Math.sin(t * 0.13) + 0.03 * Math.sin(t * 0.41);
     this.wind.g.gain.setTargetAtTime(windAmt * (1 + s.rain), t, k);
