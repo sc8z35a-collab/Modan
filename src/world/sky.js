@@ -127,6 +127,7 @@ void main(){
   float moonUp = smoothstep(-0.04, 0.03, y); // the moon (and its halo) no longer shine through the ground below the horizon
   float disk = smoothstep(0.99955, 0.9997, md) * moonUp;
   float illum = 0.5 - 0.5 * cos(uMoonPhase * 6.28318); // lit fraction
+  float darkSide = 0.0; // 1 on the unlit part of the disk: blocks the halo + sky glow painted over it
   if (disk > 0.0) {
     vec3 up = abs(uMoon.y) > 0.99 ? vec3(1.0,0.0,0.0) : vec3(0.0,1.0,0.0);
     vec3 t = normalize(cross(uMoon, up)); vec3 b = cross(t, uMoon);
@@ -143,12 +144,14 @@ void main(){
     float limb = 0.72 + 0.28 * nrm.z;              // limb darkening
     // keep the disk in the tone-mapper's shoulder (was ~2.2 -> clipped to a flat white blob when zoomed)
     vec3 lunar = vec3(0.93,0.93,0.97) * (1.15 - maria*0.55 + crater*0.18) * limb;
-    vec3 earthshine = vec3(0.05, 0.065, 0.1) * (1.0 - illum);
-    col = mix(col, col * 0.2, disk * (1.0 - lit) * uNight);  // dark side hides the stars behind it
+    vec3 earthshine = vec3(0.012, 0.016, 0.026) * (1.0 - illum) * (0.8 + 0.2 * (1.0 - maria));
+    darkSide = disk * (1.0 - lit);
+    col = mix(col, col * 0.35, darkSide * uNight);  // dark limb hides the stars / milky way behind it
     col += (lunar * lit + earthshine) * disk * uNight;
   }
-  col += vec3(0.35,0.45,0.7) * pow(max(md,0.0), 300.0) * 0.6 * uNight * illum * moonUp;
-  col += vec3(0.25,0.32,0.5) * pow(max(md,0.0), 24.0) * 0.12 * uNight * illum * moonUp;
+  float haloMask = moonUp * (1.0 - darkSide * 0.92);
+  col += vec3(0.35,0.45,0.7) * pow(max(md,0.0), 300.0) * 0.6 * uNight * illum * haloMask;
+  col += vec3(0.25,0.32,0.5) * pow(max(md,0.0), 24.0) * 0.12 * uNight * illum * haloMask;
 
   // clouds (planar projection)
   if (y > 0.0) {
