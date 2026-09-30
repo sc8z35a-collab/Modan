@@ -35,7 +35,7 @@ try {
   // aim=kind[,i[,dist[,height]]]: look at sample i of a flora kind from `dist` metres
   if (q.has('aim')) {
     const [kind, ii = 0, dist = 2.2, hh = 1.2] = q.get('aim').split(',');
-    const smp = world.flora.samples[kind]; const p = smp[Math.min(+ii, smp.length - 1)];
+    const smp = kind === 'pick' ? world.pickups.filter((p) => p.type === (q.get('ptype') || 'mushroom')).map((p) => [p.pos.x, p.pos.y, p.pos.z]) : world.flora.samples[kind]; const p = smp[Math.min(+ii, smp.length - 1)];
     const a = +(q.get('ang') || 0.7);
     q.set('cam', `${p[0] + Math.cos(a) * dist},g+${hh},${p[2] + Math.sin(a) * dist}`); q.set('look', `${p[0]},g+0.15,${p[2]}`);
     lg('aim', kind, p);
@@ -65,5 +65,11 @@ try {
   window.__info = { calls: r.info.render.calls, tris: r.info.render.triangles, trees: world.treeCount, flora: world.flora?.stats };
   r.render(scene, cam);
   lg('done', JSON.stringify(window.__info));
+  // post=<qa-server origin>&name=<shot>: send the frame to tools/qa-server.mjs (/__snap) so the viewer can run in an
+  // external browser (no Chromium in the 1GB sandbox)
+  if (q.has('post')) {
+    const png = r.domElement.toDataURL('image/jpeg', 0.88);
+    await fetch(q.get('post') + '/__snap', { method: 'POST', body: JSON.stringify({ name: q.get('name') || 'nv', png, info: window.__info }) }).catch((e) => lg('post fail', e.message));
+  }
   document.title = 'READY';
 } catch (e) { if (e === 'atlas') {} else console.error('ERR', e?.stack || e); document.title = 'ERR'; }
