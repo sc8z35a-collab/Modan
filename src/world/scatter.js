@@ -19,7 +19,7 @@ export class Scatter {
     const e = matrix.elements;
     const key = Math.floor(e[12] / this.cell) + ',' + Math.floor(e[14] / this.cell);
     if (!k.items.has(key)) k.items.set(key, []);
-    k.items.get(key).push({ m: matrix.clone(), c: color });
+    k.items.get(key).push({ m: matrix.clone(), c: color ? color.clone() : undefined }); // callers reuse one scratch Color
   }
 
   build() {

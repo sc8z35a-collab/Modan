@@ -89,7 +89,7 @@ export function windify(mat, U, strength = 1, isLeaf = false) {
           #ifdef USE_INSTANCING
             ip = instanceMatrix[3].xyz;
             mat3 im3 = mat3(instanceMatrix);
-            wObj = transpose(im3) * wObj / max(dot(im3[0], im3[0]), 1e-4);
+            wObj = transpose(im3) * wObj / max(length(im3[0]), 1e-4); // rotation only: sway keeps scaling with the instance
           #endif
           float hh = max(position.y, 0.0);
           float ph = ip.x*0.13 + ip.z*0.17;
