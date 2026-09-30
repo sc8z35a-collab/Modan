@@ -356,7 +356,7 @@ function clothesline(B, M, R, A, Bp, U, sway) {
   for (const E of [A, Bp]) B.add(torus(0.012, 0.004, 5, 10), M.rope, T(E.x, E.y, E.z, Math.PI / 2, 0, 0), 0xd8cdb0);
 }
 
-function signpost(B, M, R, gh, signMat) {
+function signpost(B, M, R, gh, signMat, arrowMat) {
   // two posts with a routed wooden board; board faces +z
   for (const x of [-0.55, 0.55]) {
     B.add(cyl(0.05, 0.055, 1.35, 10), M.bark, T(x, gh(x, 0) + 0.6, 0), 0x8a7a6a, { shade: grime(0.15, 0.5) });
@@ -365,18 +365,23 @@ function signpost(B, M, R, gh, signMat) {
   B.add(rbox(1.3, 0.34, 0.045, 0.01), signMat, T(0, gh(0, 0) + 1.02, 0.06), 0xffffff);
   for (const x of [-0.55, 0.55]) for (const y of [0.94, 1.1]) B.add(cyl(0.008, 0.008, 0.006, 8), M.metal, T(x, gh(0, 0) + y, 0.084, Math.PI / 2, 0, 0), 0x55504a);
   // small arrow board pointing to the lake
-  B.add(rbox(0.55, 0.13, 0.03, 0.006), signMat, T(-0.2, gh(0, 0) + 0.66, 0.05, 0, 0, -0.04), 0xffffff, { local: true, shade: null });
+  B.add(rbox(0.62, 0.13, 0.03, 0.006), arrowMat, T(-0.22, gh(0, 0) + 0.66, 0.05, 0, 0, -0.04), 0xffffff);
   aoLocal(B, M, gh, -0.55, 0, 0.14, 0.14, 0, 0.7); aoLocal(B, M, gh, 0.55, 0, 0.14, 0.14, 0, 0.7);
 }
 
-function signTexture() {
-  // routed letters: dark cut with a lit lower edge, on weathered planks. Board uv: rbox maps 0..1 per face.
-  return canvasTex(1024, 512, (g, w, h) => {
+function signTexture(lines, w = 1024, h = 512, arrow = 0) {
+  // routed letters: dark cut with a lit lower edge, on weathered planks. lines = [[text, sizePx, yFrac], ...]
+  return canvasTex(w, h, (g) => {
+    const R = rng(w + h);
     g.fillStyle = '#9a7650'; g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 90; i++) { const y = Math.random() * h; g.strokeStyle = `rgba(${Math.random() > 0.5 ? '60,38,20' : '200,170,120'},${0.08 + Math.random() * 0.12})`; g.lineWidth = 1 + Math.random() * 3; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= w; x += 40) g.lineTo(x, y + Math.sin(x * 0.01 + i) * 4); g.stroke(); }
-    g.fillStyle = 'rgba(40,25,12,0.5)'; g.fillRect(0, h * 0.5 - 2, w, 4);
-    const txt = (s, y, size) => { g.font = `bold ${size}px Georgia, 'Times New Roman', serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(255,230,190,0.35)'; g.fillText(s, w / 2 + 2, y + 3); g.fillStyle = '#2a1a0c'; g.fillText(s, w / 2, y); };
-    txt('MODAN CAMP', h * 0.3, 150); txt('湖畔の森  ⟵  湖 LAKE', h * 0.74, 96);
+    for (let i = 0; i < 90; i++) { const y = R() * h; g.strokeStyle = `rgba(${R() > 0.5 ? '60,38,20' : '200,170,120'},${0.08 + R() * 0.12})`; g.lineWidth = 1 + R() * 3; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= w; x += 40) g.lineTo(x, y + Math.sin(x * 0.01 + i) * 4); g.stroke(); }
+    if (h > 300) { g.fillStyle = 'rgba(40,25,12,0.5)'; g.fillRect(0, h * 0.5 - 2, w, 4); }
+    for (const [s, size, yf] of lines) {
+      g.font = `bold ${size}px Georgia, 'Noto Serif CJK JP', 'Times New Roman', serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      let sz = size; while (g.measureText(s).width > w * 0.86 && sz > 20) { sz -= 4; g.font = `bold ${sz}px Georgia, 'Noto Serif CJK JP', serif`; } // never clip at the board edge
+      g.fillStyle = 'rgba(255,230,190,0.35)'; g.fillText(s, w / 2 + 2, h * yf + 3); g.fillStyle = '#2a1a0c'; g.fillText(s, w / 2, h * yf);
+    }
+    if (arrow) { const x = arrow > 0 ? w * 0.9 : w * 0.1, d = arrow * h * 0.28; g.fillStyle = '#2a1a0c'; g.beginPath(); g.moveTo(x + d, h / 2); g.lineTo(x - d * 0.2, h * 0.2); g.lineTo(x - d * 0.2, h * 0.8); g.closePath(); g.fill(); }
     const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(30,40,20,0.3)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
   }, true, false);
 }
@@ -419,7 +424,8 @@ export function buildCampDetails(ctx) {
   const M = kitMaterials(textures);
   kitTextures();
   const sway = swayMaterial(M.fabric, U); sway.side = THREE.DoubleSide;
-  const signMat = new THREE.MeshStandardMaterial({ name: 'sign', map: signTexture(), roughness: 0.85 });
+  const signMat = new THREE.MeshStandardMaterial({ name: 'sign', map: signTexture([['MODAN CAMP', 150, 0.3], ['湖畔の森キャンプ場', 104, 0.74]]), roughness: 0.85 });
+  const arrowMat = new THREE.MeshStandardMaterial({ name: 'signArrow', map: signTexture([['湖・桟橋  LAKE', 78, 0.52]], 1024, 200, 0), roughness: 0.85 });
   const B = new Batch();
   const R = rng(4242);
   const group = new THREE.Group(); group.name = 'campDetails';
@@ -474,7 +480,7 @@ export function buildCampDetails(ctx) {
     const [p0x, p0z] = PATH_PTS[0], [p1x, p1z] = PATH_PTS[1];
     const dx = p1x - p0x, dz = p1z - p0z, L = Math.hypot(dx, dz), sx = p0x - dz / L * 2.1 + dx / L * 1.2, sz = p0z + dx / L * 2.1 + dz / L * 1.2;
     // board faces the camp (toward the fire) so it is read when walking out
-    place(sx, sz, Math.atan2(fx - sx, fz - sz), (gh) => signpost(B, M, R, gh, signMat));
+    place(sx, sz, Math.atan2(fx - sx, fz - sz), (gh) => signpost(B, M, R, gh, signMat, arrowMat));
     addCol(sx, sz, 0.35, 'sign');
   }
   // dock kit (same placement maths as main.js buildCamp)
