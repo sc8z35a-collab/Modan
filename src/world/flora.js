@@ -326,7 +326,7 @@ export class Flora {
     const cattailMat = windify(new THREE.MeshStandardMaterial({ color: 0x4a2c18, roughness: 0.95 }), U, 15, false);
     const padMat = new THREE.MeshStandardMaterial({ color: 0x3f6526, roughness: 0.35, side: THREE.DoubleSide });
     const lilyMat = new THREE.MeshStandardMaterial({ color: 0xf6f2ea, roughness: 0.5, emissive: 0x151410 });
-    const pebbleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 });
+    const pebbleMat = new THREE.MeshStandardMaterial({ map: this.world.assets.textures.rocky_terrain_02?.diff, color: 0xffffff, roughness: 0.5 });
     const driftMat = new THREE.MeshStandardMaterial({ map: this.world.assets.textures.bark_brown_02?.diff, color: 0xb8b0a4, roughness: 0.9 });
     const amanitaCap = new THREE.MeshStandardMaterial({ map: paintAmanitaTex(), roughness: 0.45 });
     const boleteCap = new THREE.MeshStandardMaterial({ color: 0x7a4a26, roughness: 0.5 });
@@ -434,30 +434,33 @@ export class Flora {
     };
     // reed beds: clump along the bank, dense where shore noise is high (not a uniform ring)
     for (let i = 0; i < Math.round(1100 * gq); i++) {
-      const p = shore(-3.5, 1.2); if (!p) continue;
+      const p = shore(-6, 3); if (!p) continue;
       if (fbm(noise, p[0] * 0.04, p[1] * 0.04, 2) < -0.05) continue;
       for (let c = 0; c < 3; c++) {
         const x = p[0] + (rnd() - 0.5) * 1.6, z = p[1] + (rnd() - 0.5) * 1.6;
         if (dockZone(x, z)) continue;
         const h = heightAt(x, z);
-        add('reed', nReed, x, z, 0.8 + rnd() * 0.5, { y: Math.min(h, 0.6), sink: 0.02, color: col.setHSL(0.17 + rnd() * 0.05, 0.35, 0.45 + rnd() * 0.2) });
+        // by real water depth: the lakebed drops to -1.2m right at the waterline, so a lakeDist band put
+        // reeds 1.4m under water with only their tips showing
+        if (h < -0.45 || h > 0.9) continue;
+        add('reed', nReed, x, z, 0.8 + rnd() * 0.5, { y: h, sink: 0.02, color: col.setHSL(0.17 + rnd() * 0.05, 0.35, 0.45 + rnd() * 0.2) });
       }
     }
     // lily colonies in sheltered shallows
     for (let i = 0; i < 70; i++) {
-      const p = shore(-22, -5); if (!p) continue;
+      const p = shore(-14, -1); if (!p) continue;
       const n = 6 + ((rnd() * 14) | 0);
       for (let k = 0; k < n; k++) {
         const x = p[0] + (rnd() - 0.5) * 4, z = p[1] + (rnd() - 0.5) * 4;
-        if (lakeDist(x, z) > -3.5 || dockZone(x, z)) continue;
+        const dh = heightAt(x, z); if (dh > -0.35 || dh < -2.6 || dockZone(x, z)) continue; // lilies root in 0.4-2.6m
         add('lilypad', nPad, x, z, 0.8 + rnd() * 0.6, { y: WORLD.waterLevel, color: col.setHSL(0.24 + rnd() * 0.06, 0.45, 0.35 + rnd() * 0.2) });
         if (rnd() < 0.18) add('lily', nLily, x + 0.05, z + 0.05, 0.8 + rnd() * 0.5, { y: WORLD.waterLevel });
       }
     }
     for (let i = 0; i < Math.round(2400 * gq); i++) {
       const p = shore(-2.0, 3.5); if (!p) continue;
-      const g = 0.45 + rnd() * 0.4;
-      add('pebble', nPeb, p[0], p[1], 0.6 + rnd() * 2.2, { align: 1, sink: 0.012, color: col.setRGB(g * (0.95 + rnd() * 0.1), g * (0.93 + rnd() * 0.08), g * (0.88 + rnd() * 0.1)) });
+      const g = 0.2 + rnd() * 0.22; // wet greys / browns (0.45-0.85 read as white eggs)
+      add('pebble', nPeb, p[0], p[1], 0.4 + rnd() * rnd() * 2.2, { align: 1, sink: 0.012, color: col.setRGB(g * (0.95 + rnd() * 0.1), g * (0.93 + rnd() * 0.08), g * (0.88 + rnd() * 0.1)) });
     }
     for (let i = 0; i < 26; i++) { const p = shore(-0.5, 2.5); if (p) { add('drift', nDrift, p[0], p[1], 0.8 + rnd() * 0.5, { align: 1, sink: 0.03, tilt: 0.08 }); this.world.colliders.add(p[0], p[1], 0.3, 'drift'); } }
 
