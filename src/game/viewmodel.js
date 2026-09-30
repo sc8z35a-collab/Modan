@@ -35,6 +35,9 @@ export class ViewModel {
     if (name === 'skewerFish' || name === 'skewerMush') this.cookMat.color.set(name === 'skewerFish' ? 0x9aa8a0 : 0xc8b090);
   }
   swing() { this.swingT = 1; }
+  // keep held tools the same size on screen at every focal length (narrow FOV would magnify them 20x):
+  // screen size ~ size_xy / (depth * tan(fov/2)) -> scale x/y by tan(fov/2)/tan(base/2) = 1/optical, keep depth
+  setLensScale(k) { if (this._lk !== k) { this._lk = k; this.root.scale.set(k, k, 1); } }
   bend(v) { this.bendV = v; }
   cookLevel(v) {
     const C = this._cc || (this._cc = { fish: new THREE.Color(0x9aa8a0), mush: new THREE.Color(0xc8b090), done: new THREE.Color(0xb0703a), burnt: new THREE.Color(0x1e1410) });

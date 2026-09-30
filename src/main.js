@@ -16,6 +16,7 @@ import { GameState } from './game/state.js';
 import { Interactions } from './game/interactions.js';
 import { ViewModel } from './game/viewmodel.js';
 import { UI } from './ui/ui.js';
+import { LensUI } from './ui/lensui.js';
 import { clamp, lerp, smoothstep } from './core/noise.js';
 
 const $ = (id) => document.getElementById(id);
@@ -69,6 +70,12 @@ class Game {
     this.player = new Player(this.camera, this.world.colliders, this.audio, (x, z, w) => this.surfaceAt(x, z, w), this.platforms);
     this.viewmodel = new ViewModel(this.camera, this.assets.textures);
     this.ui = new UI(this);
+    this.lensUI = new LensUI(this);
+    const lens = this.R.lens;
+    const zoomOk = () => this.started && !this.paused && !this.interact?.busy;
+    this.input.onZoom = (k) => { if (zoomOk()) lens.zoomBy(k); };
+    this.input.onZoomStep = (d) => { if (zoomOk()) lens.step(d); };
+    if (params.has('zoom')) lens.setZoom(+params.get('zoom'), true);
     this.interact = new Interactions(this);
     this.input.onAction = () => {
       // ignore actions on the title screen, while the menu is open or in photo mode
@@ -128,6 +135,7 @@ class Game {
       if (sh.pos) { const [x, z, yaw, pitch] = sh.pos; this.player.teleport(x, z, yaw); this.player.pitch = pitch || 0; }
       if (sh.extra.includes('fire')) { this.fire.addFuel(1); this.fire.ignite(); this.fire.intensity = 1; this.fireLogs.visible = true; }
       if (sh.extra.includes('rain')) this.rain = 1;
+      const zm = /z([0-9.]+)/.exec(sh.extra); this.R.lens.setZoom(zm ? +zm[1] : 1, true);
       this.state.timeScale = 0; this.sky.envTimer = 99; this.snapping = true; this.snapPlayer = !sh.extra.includes('title');
       const nf = +(params.get('snapf') || 2); for (let k = 0; k < nf; k++) { this.frame(1 / 30); console.log('[snap] frame', k, performance.now() | 0); await new Promise((r) => setTimeout(r, 0)); }
       const cp = this.camera.position; console.log('[snap] cam', cp.x.toFixed(1), cp.y.toFixed(1), cp.z.toFixed(1), this.snapPlayer);
@@ -391,6 +399,20 @@ class Game {
 
   shake(a) { this.shakeAmt = Math.max(this.shakeAmt || 0, a); }
 
+  // sun-shadow centre: the player at <=2x; pushed out along the view ray when zoomed so the telephoto subject
+  // (up to ~150m away) sits inside the 110m shadow frustum instead of being unshadowed
+  shadowFocus() {
+    const z = this.R.lens.zoom, p = this.player.pos;
+    const out = this._sf || (this._sf = new THREE.Vector3()), f = this._sfd || (this._sfd = new THREE.Vector3());
+    out.copy(p);
+    if (z <= 2 || !this.started) return out;
+    this.camera.getWorldDirection(f); f.y = 0;
+    const l = f.length(); if (l < 1e-4) return out;
+    const d = Math.min(150, 28 * Math.log2(z)); // 2x: 28m .. 20x: ~121m
+    out.x += (f.x / l) * d; out.z += (f.z / l) * d; out.y = heightAt(out.x, out.z);
+    return out;
+  }
+
   loop(t) {
     requestAnimationFrame((tt) => this.loop(tt));
     if (this.snapping) return;
@@ -419,7 +441,7 @@ class Game {
       s.hours += (dt * mul) / 60; // 1 real sec = 1 game min at scale 1
       if (s.hours >= 24) { s.hours -= 24; s.day++; s.flags.coffeeToday = false; }
     }
-    const sk = this.sky.update(s.hours, dt, this.player.pos);
+    const sk = this.sky.update(s.hours, dt, this.shadowFocus());
     const night = sk.night;
 
     // weather: occasional light rain in the afternoon of day 2+
@@ -434,16 +456,26 @@ class Game {
     this.scene.fog.density += mist * 0.012 + this.rain * 0.004 + this.fogMorning * 0.006;
     this.sky.uniforms.uCloud.value = 0.35 + this.rain * 0.55; // overcast while raining
 
+    // lens: smooth zoom -> camera FOV, slower look + stabilisation at tele, LOD bias
+    const lens = this.R.lens;
+    if (this.started && !this.paused) this.input.keyZoom(dt);
+    this.R.updateLens(dt);
+    this.input.lookScale = lens.lookScale();
+    this.player.stab = lens.stabilise();
+    this.viewmodel.setLensScale?.(lens.viewmodelScale());
+    this.lensUI?.update(dt);
+
     // player & camera
     if ((this.started || this.snapPlayer) && !this.photo) this.player.update(dt, this.input);
     else if (!this.started) {
+      if (lens.target !== 1) lens.setZoom(1, true);
       // cinematic title camera orbiting the camp
       this.titleCam += dt * 0.03;
       const C = WORLD.camp, a = this.titleCam + 2.2;
       this.camera.position.set(C.x + Math.cos(a) * 11, heightAt(C.x, C.z) + 2.6, C.z + Math.sin(a) * 11);
       this.camera.lookAt(C.x - 3, heightAt(C.x, C.z) + 1.0, C.z);
     } else if (this.photo) this.player.update(dt, this.input, true); // free look (no walking) in photo mode
-    if (this.shakeAmt > 0) { this.camera.position.x += (Math.random() - 0.5) * this.shakeAmt * 0.05; this.camera.position.y += (Math.random() - 0.5) * this.shakeAmt * 0.05; this.shakeAmt -= dt * 2; }
+    if (this.shakeAmt > 0) { const sa = this.shakeAmt * 0.05 * lens.stabilise(); this.camera.position.x += (Math.random() - 0.5) * sa; this.camera.position.y += (Math.random() - 0.5) * sa; this.shakeAmt -= dt * 2; }
 
     // survival stats
     if (this.started) {
@@ -467,7 +499,7 @@ class Game {
     }
 
     // world systems
-    this.world.update(dt, this.camera);
+    this.world.update(dt, this.camera, lens.lodBias());
     this.grass.update(dt, this.camera.position, this.player.pos, night, this.world.U.uWind.value);
     this.fire.update(dt, this.world.U.uWind.value, this.rain);
     this.fireLogs.userData.charred && (this.fireLogs.userData.charred.emissiveIntensity = this.fire.intensity * 2.5);

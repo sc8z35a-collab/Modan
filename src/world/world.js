@@ -326,12 +326,18 @@ export class World {
     return 'grass';
   }
 
-  update(dt, cam) {
+  // lodBias (lens): at 20x the narrow FOV makes far objects big on screen -> LOD/cull distances are scaled up
+  update(dt, cam, lodBias = 1) {
     this.U.uTime.value += dt;
     // gusty wind
     const t = this.U.uTime.value;
     const g = 0.7 + 0.35 * Math.sin(t * 0.23) + 0.2 * Math.sin(t * 0.61 + 1);
     this.U.uWind.value.set(0.85 * g, 0.4 * g);
-    this.scatter.update(cam.position);
+    let fr = null;
+    if (lodBias > 1) {
+      fr = this._fr || (this._fr = new THREE.Frustum()); const m = this._frm || (this._frm = new THREE.Matrix4());
+      cam.updateMatrixWorld(); fr.setFromProjectionMatrix(m.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    }
+    this.scatter.update(cam.position, lodBias, fr);
   }
 }

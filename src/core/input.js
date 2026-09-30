@@ -9,6 +9,10 @@ export class Input {
     this.keys = new Set();
     this.joyId = null; this.lookId = null;
     this.onTap = null;
+    this.onZoom = null;       // (factor) multiplicative zoom request (pinch / wheel / keys)
+    this.onZoomStep = null;   // (+1 / -1) preset step
+    this.lookScale = 1;       // set by the game from the lens (tele = slower look)
+    this.pinchId = null; this.pinchD = 0;
     this.enabled = true;
 
     const joyzone = document.getElementById('joyzone');
@@ -53,14 +57,31 @@ export class Input {
     window.addEventListener('touchmove', joyMove, { passive: false });
     window.addEventListener('touchend', joyEnd); window.addEventListener('touchcancel', joyEnd);
 
+    const touchById = (list, id) => { for (const t of list) if (t.identifier === id) return t; return null; };
     lookzone.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      if (this.lookId !== null) return;
+      if (this.lookId !== null) {
+        // second finger in the look zone = pinch zoom (the first finger stops looking while pinching)
+        if (this.pinchId === null) {
+          const t = e.changedTouches[0], a = touchById(e.touches, this.lookId);
+          if (a && t.identifier !== this.lookId) { this.pinchId = t.identifier; this.pinchD = Math.hypot(t.clientX - a.clientX, t.clientY - a.clientY); this.lookStart = null; }
+        }
+        return;
+      }
       const t = e.changedTouches[0];
       this.lookId = t.identifier; this.lookLast = { x: t.clientX, y: t.clientY };
       this.lookStart = { x: t.clientX, y: t.clientY, time: performance.now() };
     }, { passive: false });
     window.addEventListener('touchmove', (e) => {
+      if (this.pinchId !== null) {
+        const a = touchById(e.touches, this.lookId), b = touchById(e.touches, this.pinchId);
+        if (a && b) {
+          const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+          if (this.pinchD > 8 && d > 8) this.onZoom?.(d / this.pinchD);
+          this.pinchD = d; this.lookLast = { x: a.clientX, y: a.clientY };
+        }
+        return;
+      }
       for (const t of e.changedTouches) {
         if (t.identifier !== this.lookId) continue;
         this.lookDelta.x += (t.clientX - this.lookLast.x);
@@ -70,7 +91,15 @@ export class Input {
     }, { passive: false });
     const lookEnd = (e) => {
       for (const t of e.changedTouches) {
+        if (t.identifier === this.pinchId) { this.pinchId = null; continue; }
         if (t.identifier !== this.lookId) continue;
+        if (this.pinchId !== null) {
+          // the first finger lifted while pinching: the remaining finger continues as the look finger
+          const b = touchById(e.touches, this.pinchId);
+          this.lookId = b ? this.pinchId : null; this.pinchId = null; this.lookStart = null;
+          if (b) this.lookLast = { x: b.clientX, y: b.clientY };
+          continue;
+        }
         this.lookId = null;
         const s = this.lookStart;
         if (s && performance.now() - s.time < 250 && Math.hypot(t.clientX - s.x, t.clientY - s.y) < 12) this.onTap?.(t.clientX, t.clientY);
@@ -100,7 +129,16 @@ export class Input {
       this.keys.add(e.code);
       // key auto-repeat fired the action ~30x/s (instantly finishing minigames / chaining actions)
       if ((e.code === 'KeyE' || e.code === 'Space') && !e.repeat) { e.preventDefault(); this.onAction?.(); }
+      // zoom: = / - step through presets (0.5 1 2 5 10 20 40), Z / X hold for continuous zoom
+      if ((e.code === 'Equal' || e.code === 'NumpadAdd') && !e.repeat) this.onZoomStep?.(1);
+      if ((e.code === 'Minus' || e.code === 'NumpadSubtract') && !e.repeat) this.onZoomStep?.(-1);
     });
+    window.addEventListener('wheel', (e) => {
+      if (typing(e) || e.target?.closest?.('#menu, .panel, #fieldguide')) return;
+      e.preventDefault();
+      // trackpads send many small deltas, mice ~100 per notch: exponential mapping handles both
+      this.onZoom?.(Math.exp(-Math.max(-300, Math.min(300, e.deltaY)) * 0.0022));
+    }, { passive: false });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     // keys released while unfocused never fire keyup -> the player kept walking forever
     window.addEventListener('blur', () => this.reset());
@@ -124,16 +162,22 @@ export class Input {
   reset() {
     this.keys.clear();
     this.resetJoy();
-    this.lookId = null; this.lookDelta.x = this.lookDelta.y = 0;
+    this.lookId = null; this.pinchId = null; this.lookDelta.x = this.lookDelta.y = 0;
     this.md = false;
   }
 
   consumeLook() {
-    const k = 0.0042 * this.sens;
+    const k = 0.0042 * this.sens * this.lookScale;
     const d = this._look || (this._look = { x: 0, y: 0 });
     d.x = this.lookDelta.x * k; d.y = this.lookDelta.y * k;
     this.lookDelta.x = this.lookDelta.y = 0;
     return d;
+  }
+
+  // held Z / X = continuous zoom in / out (called once per frame)
+  keyZoom(dt) {
+    const z = (this.keys.has('KeyZ') ? 1 : 0) - (this.keys.has('KeyX') ? 1 : 0);
+    if (z) this.onZoom?.(Math.exp(z * dt * 1.6));
   }
 
   getMove() {
