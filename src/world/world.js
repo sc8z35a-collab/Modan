@@ -173,6 +173,10 @@ export class World {
       const gr = sp.getX(i) * c; sp.setX(i, sp.getX(i) - gr); sp.setY(i, sp.getY(i) + gr);
     }
     sp.needsUpdate = true;
+    // per-vertex canopy for the terrain shader (shade + needle-litter tint under crowns)
+    const ca = new Float32Array(pos.count);
+    for (let i = 0; i < pos.count; i++) ca[i] = this.canopyAt(pos.getX(i), pos.getZ(i));
+    geo.setAttribute('canopy', new THREE.BufferAttribute(ca, 1));
   }
 
   canopyAt(x, z) {
