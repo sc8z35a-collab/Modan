@@ -446,8 +446,11 @@ export function buildTripod() {
   }
   B.add(torus(0.025, 0.008, 6, 14), M.iron, T(0, 1.3, 0, Math.PI / 2, 0, 0), iron);
   // chain links from ring to grate
-  for (let i = 0; i < 17; i++) B.add(torus(0.012, 0.0025, 4, 10), M.iron, T(0, 1.27 - i * 0.026, 0, 0, i % 2 ? Math.PI / 2 : 0, 0, 1, 1.6, 1), iron);
-  for (let i = 0; i < 3; i++) { const a = i / 3 * 6.28; B.add(cyl(0.002, 0.002, 0.36, 4), M.iron, T(Math.cos(a) * 0.14, 0.97, Math.sin(a) * 0.14, Math.sin(a) * 0.39, 0, -Math.cos(a) * 0.39), iron); }
+  // short chain ending in a ring where the grate's 3 suspension wires meet (y=1.14). It used to run down to
+  // y=0.85 straight through the kettle standing on the grate (kettle bail top ~1.07).
+  for (let i = 0; i < 5; i++) B.add(torus(0.012, 0.0025, 4, 10), M.iron, T(0, 1.27 - i * 0.026, 0, 0, i % 2 ? Math.PI / 2 : 0, 0, 1, 1.6, 1), iron);
+  B.add(torus(0.014, 0.003, 5, 12), M.iron, T(0, 1.14, 0, Math.PI / 2, 0, 0), iron);
+  for (let i = 0; i < 3; i++) { const a = i / 3 * 6.28, lo = new THREE.Vector3(Math.cos(a) * 0.27, 0.805, Math.sin(a) * 0.27), hi = new THREE.Vector3(Math.cos(a) * 0.012, 1.135, Math.sin(a) * 0.012); B.add(loft([lo, lo.clone().lerp(hi, 0.5), hi], () => [0.0018, 0.0018], 2, 4, false), M.iron, null, iron); }
   // grate: rim + 12 radial bars + inner ring
   B.add(torus(0.28, 0.008, 6, 40), M.iron, T(0, 0.8, 0, Math.PI / 2, 0, 0), iron);
   B.add(torus(0.1, 0.006, 6, 24), M.iron, T(0, 0.8, 0, Math.PI / 2, 0, 0), iron);
