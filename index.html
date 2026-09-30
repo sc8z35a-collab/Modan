@@ -106,7 +106,15 @@
     </div>
   </div>
 
-  <div id="photoHint" class="hidden">写真モード · 画面をタップで戻る</div>
+  <div id="photoHint" class="hidden">タップでピント · ドラッグで構図 · ピンチでズーム</div>
+  <!-- camera UI (photo mode) -->
+  <div id="photoUI" class="hidden">
+    <div id="afBox"><span id="afDist"></span></div>
+    <div id="grid3"></div>
+    <button id="btnPhotoExit" aria-label="カメラを閉じる">✕</button>
+    <button id="btnShutter" aria-label="シャッター"><i></i></button>
+    <button id="photoThumb" class="hidden" aria-label="最新の写真を保存"></button>
+  </div>
   <div id="fps" class="hidden"></div>
   <div id="fade"></div>
 
