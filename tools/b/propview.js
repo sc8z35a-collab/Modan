@@ -69,6 +69,7 @@ cam.position.set(...pc); cam.lookAt(...pl);
 details?.update?.(0.016, { night: night ? 1 : 0, time: 1, camera: cam });
 // debug: hide meshes whose name contains any of ?hide=a,b
 if (q.get('hide')) { const hs = q.get('hide').split(','); scene.traverse((o) => { if (o.isMesh && hs.some((h) => o.name.includes(h))) o.visible = false; }); }
+if (q.get('probe')) scene.traverse((o) => { if (o.isMesh && o.name.includes(q.get('probe'))) { const c = o.geometry.attributes.color?.array || []; let mx = 0, sum = 0; for (const v of c) { mx = Math.max(mx, v); sum += v; } const m = o.material; console.log('PROBE', o.name, 'n', c.length / 3, 'max', mx.toFixed(3), 'avg', (sum / c.length).toFixed(3), 'vc', m.vertexColors, 'col', m.color?.getHexString(), 'map', !!m.map, m.map?.image?.width, 'emis', m.emissive?.getHexString(), 'side', m.side); } });
 if (q.has('names')) { const n = []; scene.traverse((o) => { if (o.isMesh) n.push(o.name); }); console.log(n.join(' ')); }
 r.render(scene, cam); r.render(scene, cam);
 window.__info = { calls: r.info.render.calls, tris: r.info.render.triangles };
