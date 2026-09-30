@@ -90,6 +90,10 @@ export class Renderer {
     composer.addPass(this.lensPass);
     this._lensOn = null;
     this.setLensActive(false);
+    // QA: ?nopass=ao,dof,fx,smaa,lens disables individual passes to bisect rendering problems
+    const off = (new URLSearchParams(location.search).get('nopass') || '').split(',');
+    const tag = { ao: this.ao, dof: this.dofPass, lens: this.lensPass };
+    for (const k of off) if (tag[k]) tag[k].enabled = false;
     this.resize();
   }
 
