@@ -151,18 +151,28 @@ export class Particles {
         L.p.set(cp.x + Math.cos(a) * r, 0, cp.z + Math.sin(a) * r);
         L.ground = heightAt(L.p.x, L.p.z);
         L.p.y = L.ground + 4 + Math.random() * 6;
-        L.rest = 0;
+        L.rest = 0; L.landed = false;
       }
-      if (L.p.y > L.ground + 0.01) {
+      if (!L.landed) {
         L.ph += dt * L.spin;
         const flutter = Math.sin(L.ph * 1.7);
         L.p.x += (Math.cos(L.ph) * 0.35 + wx * 0.5) * dt;
         L.p.z += (Math.sin(L.ph * 0.8) * 0.35 + wz * 0.5) * dt;
         L.p.y -= (L.fall * (0.7 + 0.5 * Math.abs(flutter)) + rain * 1.5) * dt;
-        const over = L.p.y < WORLD.waterLevel + 0.005 && L.ground < WORLD.waterLevel;
-        if (L.p.y <= L.ground + 0.01 || over) { L.p.y = Math.max(L.ground, WORLD.waterLevel) + 0.01; L.rest = 8 + Math.random() * 10; }
+        // the leaf drifts metres sideways while falling: re-sample the ground under it when it gets close
+        // (the height taken at spawn left leaves hovering / buried on slopes)
+        if (L.p.y < L.ground + 1.5) L.ground = heightAt(L.p.x, L.p.z);
+        const floor = Math.max(L.ground, WORLD.waterLevel) + 0.01; // lands on the lake surface, not the lake bed
+        if (L.p.y <= floor) { L.p.y = floor; L.landed = true; L.rest = 8 + Math.random() * 10; }
         e.set(L.ph * 0.9 + flutter, L.ph * 0.6, Math.cos(L.ph) * 1.2);
-      } else e.set(-Math.PI / 2, L.ph, 0); // lying flat on the ground / floating on the lake
+      } else {
+        if (L.ground < WORLD.waterLevel) { // floating: drift with the wind, bob a little
+          L.p.x += wx * 0.08 * dt; L.p.z += wz * 0.08 * dt; L.ph += dt * 0.2;
+          L.ground = heightAt(L.p.x, L.p.z);
+          if (L.ground >= WORLD.waterLevel) { L.p.y = L.ground + 0.01; L.rest = Math.min(L.rest, 0.01); } // washed ashore -> recycle
+        }
+        e.set(-Math.PI / 2, L.ph, 0); // lying flat on the ground / floating on the lake
+      }
       q.setFromEuler(e);
       m.compose(L.p, q, this._s);
       this.leaves.setMatrixAt(i, m);
