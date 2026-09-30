@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { heightAt } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
-import { Batch, T, kitMaterials, kitTextures, rbox, box, cyl, tube, loft, sphere, torus, lathe, ribbon, pie, pieFace, jitter } from './propkit.js';
+import { Batch, T, kitMaterials, kitTextures, rbox, box, cyl, tube, loft, sphere, torus, lathe, ribbon, pie, pieFace, jitter, smoothNormals } from './propkit.js';
 
 // deterministic 0..1 hash of a position (identical for coincident vertices of non-indexed geometry)
 export function posHash(x, y, z, seed = 0) {
@@ -208,7 +208,7 @@ export function buildFireRing(textures) {
   const rnd = mulberry32(3);
   const stoneMat = new THREE.MeshStandardMaterial({ name: 'ringStone', vertexColors: true, map: textures.rocky_terrain_02.diff, normalMap: textures.rocky_terrain_02.nor, roughness: 0.9 });
   const ashMat = new THREE.MeshStandardMaterial({ name: 'ash', vertexColors: true, map: kitTextures().grunge, roughness: 1 });
-  const tints = [0x9a948c, 0x8c8a86, 0xa39a8e, 0x7f7b76, 0x958b80];
+  const tints = [0xa29c9a, 0x94918f, 0xaaa29c, 0x86827f, 0x9c948e]; // neutral greys: the texture itself is olive
   for (let i = 0; i < 11; i++) {
     const a = (i / 11) * Math.PI * 2 + (rnd() - 0.5) * 0.12;
     const geo = new THREE.IcosahedronGeometry(0.2 + rnd() * 0.07, 3);
@@ -218,7 +218,7 @@ export function buildFireRing(textures) {
       const k = 0.82 + posHash(+x.toFixed(4), +y.toFixed(4), +z.toFixed(4), seed) * 0.28 + 0.06 * Math.sin(x * 9 + seed) * Math.cos(z * 7);
       p.setXYZ(j, x * k * 1.1, y * k * 0.62, z * k * 0.9);
     }
-    geo.computeVertexNormals();
+    smoothNormals(geo); // polyhedra are non-indexed: computeVertexNormals alone gave flat facets
     const rx = Math.cos(a) * 0.72, rz = Math.sin(a) * 0.72, ry = -a + (rnd() - 0.5) * 0.6;
     // soot: inner side (toward the fire) and upper faces darkened, bottom damp/earthy
     B.add(geo, stoneMat, T(rx, 0.06 + rnd() * 0.03, rz, (rnd() - 0.5) * 0.3, ry, (rnd() - 0.5) * 0.3), tints[i % 5], { shade: (q, n, c) => {
@@ -230,13 +230,13 @@ export function buildFireRing(textures) {
   // ash bed: domed disc, light grey centre -> black charcoal edge, conformed later by settle (flat ring area)
   const ash = new THREE.CircleGeometry(0.62, 40, 0, Math.PI * 2); ash.rotateX(-Math.PI / 2);
   { const p = ash.attributes.position; for (let i = 0; i < p.count; i++) { const r = Math.hypot(p.getX(i), p.getZ(i)); p.setY(i, 0.02 + 0.035 * (1 - (r / 0.62) ** 2) + (posHash(p.getX(i), 0, p.getZ(i), 4) - 0.5) * 0.01); } ash.computeVertexNormals(); }
-  B.add(ash, ashMat, null, 0xffffff, { shade: (q, n, c) => { const r = Math.hypot(q.x, q.z) / 0.62; const v = 0.55 - 0.45 * r + (posHash(q.x * 3, 1, q.z * 3, 2) - 0.5) * 0.2; c.setRGB(v, v * 0.97, v * 0.94); } });
+  B.add(ash, ashMat, null, 0xffffff, { shade: (q, n, c) => { const r = Math.hypot(q.x, q.z) / 0.62; const v = 0.34 - 0.28 * r + (posHash(q.x * 3, 1, q.z * 3, 2) - 0.5) * 0.14; // grey ash, not snow c.setRGB(v, v * 0.97, v * 0.94); } });
   // charcoal chunks + white-ashed ember ends + scorched ground ring
   for (let i = 0; i < 38; i++) {
     const a = rnd() * 6.283, d = Math.sqrt(rnd()) * 0.5, x = Math.cos(a) * d, z = Math.sin(a) * d;
     const geo = new THREE.BoxGeometry(0.03 + rnd() * 0.05, 0.02 + rnd() * 0.02, 0.025 + rnd() * 0.04, 2, 1, 2); jitter(geo, 0.012, 40, i);
     const white = rnd() < 0.3;
-    B.add(geo, ashMat, T(x, 0.035 + 0.03 * (1 - (d / 0.62) ** 2), z, rnd(), rnd() * 6, rnd()), white ? 0x8a8680 : 0x141210);
+    B.add(geo, ashMat, T(x, 0.035 + 0.03 * (1 - (d / 0.62) ** 2), z, rnd(), rnd() * 6, rnd()), white ? 0x6a6660 : 0x141210);
   }
   const scorch = new THREE.RingGeometry(0.55, 1.15, 40, 3); scorch.rotateX(-Math.PI / 2); scorch.translate(0, 0.012, 0);
   B.add(scorch, M.ao, null, 0x666666, { shade: (q, n, c) => { const r = Math.hypot(q.x, q.z); c.multiplyScalar(r < 0.85 ? 1 : Math.max(0, 1 - (r - 0.85) / 0.3)); } });

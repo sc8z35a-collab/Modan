@@ -379,3 +379,13 @@ export function aoDecal(batch, mats, heightAt, x, z, rx, rz = rx, ry = 0, streng
   const c = Math.round(255 * Math.min(1, strength));
   batch.add(g, mats.ao, null, (c << 16) | (c << 8) | c);
 }
+
+// smooth normals for non-indexed geometry (Icosahedron/Polyhedron, ExtrudeGeometry...): average face normals of
+// all vertices sharing a (quantised) position. computeVertexNormals() on such geometry gives flat facets.
+export function smoothNormals(geo, q = 1e4) {
+  const p = geo.attributes.position; geo.computeVertexNormals(); const n = geo.attributes.normal;
+  const acc = new Map(), key = (i) => `${Math.round(p.getX(i) * q)},${Math.round(p.getY(i) * q)},${Math.round(p.getZ(i) * q)}`;
+  for (let i = 0; i < p.count; i++) { const k = key(i); const a = acc.get(k) || [0, 0, 0]; a[0] += n.getX(i); a[1] += n.getY(i); a[2] += n.getZ(i); acc.set(k, a); }
+  for (let i = 0; i < p.count; i++) { const a = acc.get(key(i)), l = Math.hypot(a[0], a[1], a[2]) || 1; n.setXYZ(i, a[0] / l, a[1] / l, a[2] / l); }
+  n.needsUpdate = true; return geo;
+}
