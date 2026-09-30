@@ -18,7 +18,6 @@ import { Interactions } from './game/interactions.js';
 import { ViewModel } from './game/viewmodel.js';
 import { UI } from './ui/ui.js';
 import { LensUI } from './ui/lensui.js';
-import { buildCampDetails } from './world/campdetail.js';
 import { installLaneD } from './fx/laned.js';
 import { clamp, lerp, smoothstep } from './core/noise.js';
 
