@@ -67,16 +67,18 @@ function choppingBlock(B, M, R, gh) {
   const top = radial(new THREE.CircleGeometry(r, 28).rotateX(-Math.PI / 2).translate(0, h - 0.03, 0), (a) => f(a, h));
   B.add(top, M.endgrain, null, 0xb7a38c);
   // axe cuts in the top (dark wedges)
-  for (let i = 0; i < 5; i++) B.add(box(0.12 + R() * 0.08, 0.004, 0.004), M.endgrain, T((R() - 0.5) * 0.18, h - 0.029, (R() - 0.5) * 0.18, 0, R() * 3, 0), 0x3c2b1c);
+  // old axe cuts in the top: thin dark kerfs with a lighter bruised rim
+  for (let i = 0; i < 4; i++) { const x = (R() - 0.5) * 0.16, z = (R() - 0.5) * 0.16, ry = R() * 3, l = 0.07 + R() * 0.07; B.add(box(l, 0.002, 0.0025), M.endgrain, T(x, h - 0.0295, z, 0, ry, 0), 0x6a4f35); B.add(box(l * 1.1, 0.001, 0.009), M.endgrain, T(x, h - 0.0298, z, 0, ry, 0), 0xcdb89a); }
   // roots flaring into the ground
   for (let i = 0; i < 5; i++) {
     const a = i / 5 * Math.PI * 2 + R() * 0.5, c = Math.cos(a), s = Math.sin(a);
     B.add(loft([[c * r * 0.85, 0.12, s * r * 0.85], [c * (r + 0.07), 0.035, s * (r + 0.07)], [c * (r + 0.2), gh(c * (r + 0.2), s * (r + 0.2)) - 0.02, s * (r + 0.2)]], (t) => [0.055 * (1 - t) + 0.012, 0.04 * (1 - t) + 0.01], 8, 8), M.bark, null, 0x7d6f62, { shade: grime(0.08, 0.5) });
   }
   // axe buried in the top: blade edge 3cm into the wood, handle rising toward the grip
-  const th = -1.95; const m = T(0, 0, 0, 0, 0, th);
-  const edge = V3(0.165, 0.66, 0).applyMatrix4(m);
-  addAxe(B, M, T(0.03 - edge.x, h - 0.06 - edge.y, 0.02, 0, 0.35, 0).multiply(m));
+  // rotate so the blade points down (-y) and the handle rises ~30deg: z-rot of -(PI/2 - 0.5)
+  const th = -(Math.PI / 2 - 0.52); const m = T(0, 0, 0, 0, 0, th);
+  const edge = V3(0.17, 0.66, 0).applyMatrix4(m);
+  addAxe(B, M, T(0, 0, 0, 0, 0.5, 0).multiply(T(-0.02 - edge.x, h - 0.03 - 0.028 - edge.y, 0)).multiply(m));
   // wood chips + bark flakes around
   for (let i = 0; i < 46; i++) {
     const a = R() * Math.PI * 2, d = r + 0.05 + Math.pow(R(), 1.5) * 0.9, x = Math.cos(a) * d, z = Math.sin(a) * d;
