@@ -124,7 +124,7 @@ export class Campfire {
       uniforms: { uTex: { value: makeSoftTexture() }, uPR: this.prU },
       // point size follows the renderer pixel ratio (was baked from devicePixelRatio, wrong on medium/high quality)
       // and is clamped (points at/behind the camera produced negative or huge sizes)
-      vertexShader: `attribute float aLife; uniform float uPR; varying float vL; void main(){ vL=aLife; vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = clamp((6.0 + aLife*8.0) * (6.0 / max(-mv.z, 0.05)) * uPR, 0.0, 128.0); gl_Position = projectionMatrix*mv; }`,
+      vertexShader: `attribute float aLife; uniform float uPR; varying float vL; void main(){ vL=aLife; vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = clamp((6.0 + aLife*8.0) * (6.0 / max(-mv.z, 0.05)) * (projectionMatrix[1][1] * 0.7002) * uPR, 0.0, 64.0 * uPR); gl_Position = projectionMatrix*mv; }`,
       fragmentShader: `uniform sampler2D uTex; varying float vL; void main(){ float a = texture2D(uTex, gl_PointCoord).a * smoothstep(0.0,0.3,vL); if(vL<=0.0) discard; vec3 c = mix(vec3(0.9,0.18,0.03), mix(vec3(1.0,0.55,0.15), vec3(1.0,0.9,0.6), smoothstep(0.9,1.8,vL)), smoothstep(0.05,0.6,vL)); gl_FragColor = vec4(c*6.0*a, a); }`,
     }));
     this.sparkMesh.frustumCulled = false;
@@ -303,7 +303,9 @@ export class Fireflies {
           p += vec3(sin(t*1.3)*1.6, 0.9 + sin(t*0.9)*0.6 + aSeed*1.2, cos(t*1.1)*1.6);
           vec4 mv = modelViewMatrix*vec4(p,1.0);
           vA = pow(max(sin(uTime*(1.2+aSeed) + aSeed*30.0),0.0), 3.0);
-          gl_PointSize = clamp(18.0 * (4.0 / max(-mv.z, 0.05)) * uPR, 0.0, 128.0);
+          // a firefly drifting right past the lens became a 128px green blob: fade out inside ~1.2m
+          vA *= smoothstep(0.35, 1.2, -mv.z);
+          gl_PointSize = clamp(18.0 * (4.0 / max(-mv.z, 0.05)) * (projectionMatrix[1][1] * 0.7002) * uPR, 0.0, 48.0 * uPR);
           gl_Position = projectionMatrix*mv; }`,
       fragmentShader: `uniform sampler2D uTex; uniform float uAmt; varying float vA;
         void main(){ float a = texture2D(uTex, gl_PointCoord).a * vA * uAmt; gl_FragColor = vec4(vec3(0.75,1.0,0.3)*5.0*a, a); }`,
