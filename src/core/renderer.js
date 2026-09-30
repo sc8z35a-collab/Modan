@@ -12,6 +12,8 @@ export const QUALITY = {
   high: { pixelRatio: 1.6, shadow: 2048, ao: true, aoHalf: true, grass: 0.7, trees: 0.8, water: 0.5, bloom: true, smaa: true },
   // QA-only profile for headless CI in a 1GB sandbox (never used on device)
   qa: { pixelRatio: 1.0, shadow: 1024, ao: true, aoHalf: true, grass: 0.25, trees: 0.35, water: 0.3, bloom: true, smaa: true, texMax: 256 },
+  // QA-lite: logic/UI probes of the FULL game inside the 1GB SwiftShader sandbox (qa still OOMs there)
+  qalite: { pixelRatio: 0.5, shadow: 512, ao: false, aoHalf: true, grass: 0.02, trees: 0.08, water: 0.15, bloom: true, smaa: false, texMax: 128 },
   medium: { pixelRatio: 1.25, shadow: 2048, ao: false, aoHalf: true, grass: 0.45, trees: 0.6, water: 0.35, bloom: true, smaa: false },
 };
 
