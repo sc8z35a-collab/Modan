@@ -53,6 +53,7 @@ export const GUIDE = [
     text: '日本に自生する唯一のスイレン。未の刻（午後2時頃）に花を開くことからこの名がついた。' },
 ];
 const CATS = [['all', 'すべて'], ['fish', '魚'], ['bird', '鳥・虫'], ['plant', '植物・キノコ']];
+const CAT_NAME = { fish: '魚', bird: '鳥・虫', plant: '植物・キノコ' };
 const FISH_ID = { 'ニジマス': 'rainbow', 'ヤマメ': 'yamame', 'イワナ': 'iwana', 'ブラウントラウト': 'brown' };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -128,7 +129,7 @@ export class FieldGuide {
       return `<button class="fg-card ${seen ? 'seen' : 'locked'}" data-id="${e.id}">
         <div class="fg-ph">${seen ? `<img loading="lazy" decoding="async" alt="${esc(e.name)}" src="${this.photoUrl(e.id)}">` : '<span>?</span>'}</div>
         <div class="fg-nm">${seen ? esc(e.name) : '？？？'}</div>
-        ${seen && this.data.best[e.id] ? `<div class="fg-best">最大 ${this.data.best[e.id]}cm</div>` : ''}
+        <div class="fg-best">${seen && this.data.best[e.id] ? `最大 ${this.data.best[e.id]}cm` : ''}</div>
       </button>`;
     }).join('');
     this.grid.querySelectorAll('.fg-card').forEach((c) => { c.onclick = () => this.showDetail(c.dataset.id); });
@@ -144,9 +145,11 @@ export class FieldGuide {
     } else {
       const m = this.meta[id];
       const credit = m ? `写真: ${esc(m.author)} / <a href="${esc(m.licenseUrl || m.source)}" target="_blank" rel="noopener">${esc(m.license)}</a> — <a href="${esc(m.source)}" target="_blank" rel="noopener">Wikimedia Commons</a>` : '写真: Wikimedia Commons';
+      const d = new Date(this.data.seen[id]);
+      const seenDay = Number.isFinite(d.getTime()) ? `${d.getMonth() + 1}/${d.getDate()}` : '—';
       const best = this.data.best[id] ? `<p class="fg-rec">🎣 あなたの最大記録：<b>${this.data.best[id]} cm</b></p>` : '';
-      this.detail.innerHTML = `<div class="fg-d-in"><div class="fg-d-ph"><img alt="${esc(e.name)}" src="${this.photoUrl(id)}"></div><div class="fg-d-tx">
-        <h3>${esc(e.name)}</h3><div class="fg-sci">${esc(e.sci)}</div><p>${esc(e.text)}</p>${best}
+      this.detail.innerHTML = `<div class="fg-d-in"><div class="fg-d-ph"><img class="bg" alt="" aria-hidden="true" src="${this.photoUrl(id)}"><img class="main" alt="${esc(e.name)}" src="${this.photoUrl(id)}"></div><div class="fg-d-tx">
+        <h3>${esc(e.name)}</h3><div class="fg-sci">${esc(e.sci)}</div><div class="fg-meta"><span>${CAT_NAME[e.cat] || ''}</span><span>発見日 ${seenDay}</span></div><p>${esc(e.text)}</p>${best}
         <div class="fg-credit">${credit}</div><button class="fg-back">もどる</button></div></div>`;
     }
     this.detail.classList.remove('hidden');
