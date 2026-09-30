@@ -102,8 +102,9 @@ export class Renderer {
 
   // per-frame: smooth zoom, enable the lens pass only when it does something
   updateLens(dt) {
-    this.lens.update(dt);
+    const changed = this.lens.update(dt);
     const z = this.lens.zoom;
+    if (changed && this.photoMode) this.setPhotoMode(true, this.focusDist); // DOF depth follows the focal length
     this.setLensActive(Math.abs(z - 1) > 1e-3);
   }
 
@@ -125,7 +126,10 @@ export class Renderer {
     if (on) {
       const coc = this.dof.cocMaterial;
       coc.focusDistance = focusDist;
-      coc.focusRange = Math.max(1.2, focusDist * 0.35);
+      // longer focal length = shallower depth of field (DoF ~ 1/f^2 at a fixed subject distance)
+      const z = Math.max(0.5, this.lens.zoom);
+      coc.focusRange = Math.max(0.25, focusDist * 0.35 / Math.pow(z, 0.8));
+      this.dof.bokehScale = Math.min(6, 3.2 * Math.pow(z, 0.25));
     }
   }
 
