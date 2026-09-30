@@ -42,7 +42,7 @@ try {
   }
   const cp = parse(q.get('cam'), `${WORLD.camp.x + 10},g+1.6,${WORLD.camp.z + 10}`);
   const lp = parse(q.get('look'), `${WORLD.camp.x},g+1,${WORLD.camp.z}`);
-  const Y = (x, z, s) => (String(s).startsWith('g') ? heightAt(x, z) + (+(String(s).slice(1)) || 0) : +s);
+  const Y = (x, z, s) => (String(s).startsWith('g') ? Math.max(heightAt(x, z), 0) + (+(String(s).slice(1)) || 0) : +s);
   cam.position.set(+cp[0], Y(+cp[0], +cp[2], cp[1]), +cp[2]);
   cam.lookAt(+lp[0], Y(+lp[0], +lp[2], lp[1]), +lp[2]);
   cam.updateMatrixWorld();
