@@ -3,6 +3,7 @@
 // inside the 1GB SwiftShader sandbox.  ?zoom=0.5|1|20|40 &pass=all|none|bloom... &hours=16 &w=640&h=288 &trees=0
 import * as THREE from 'three';
 import { EffectComposer, RenderPass, EffectPass, BloomEffect, ToneMappingEffect, ToneMappingMode, VignetteEffect, SMAAEffect, SMAAPreset } from 'postprocessing';
+import { N8AOPostPass } from 'n8ao';
 import { Lens } from '../../src/core/lens.js';
 import { Sky } from '../../src/world/sky.js';
 import { buildTerrain } from '../../src/world/terrain.js';
@@ -37,6 +38,7 @@ try {
   else {
     const composer = new EffectComposer(r, { frameBufferType: q.get('fb') === 'u8' ? THREE.UnsignedByteType : THREE.HalfFloatType });
     composer.addPass(new RenderPass(scene, cam));
+    if (q.has('ao')) { const ao = new N8AOPostPass(scene, cam, W, H); ao.configuration.halfRes = true; ao.configuration.aoSamples = 8; ao.configuration.gammaCorrection = false; composer.addPass(ao); }
     if (mode !== 'lensonly') composer.addPass(new EffectPass(cam, new BloomEffect({ intensity: 1, mipmapBlur: true }), new ToneMappingEffect({ mode: ToneMappingMode.AGX }), new VignetteEffect()));
     if (mode === 'all') composer.addPass(new EffectPass(cam, new SMAAEffect({ preset: SMAAPreset.HIGH })));
     if (lens.zoom !== 1 || q.has('forcelens')) composer.addPass(new EffectPass(cam, lens.effect));
