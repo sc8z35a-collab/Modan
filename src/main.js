@@ -17,6 +17,7 @@ import { Interactions } from './game/interactions.js';
 import { ViewModel } from './game/viewmodel.js';
 import { UI } from './ui/ui.js';
 import { LensUI } from './ui/lensui.js';
+import { buildCampDetails } from './world/campdetail.js';
 import { installLaneD } from './fx/laned.js';
 import { clamp, lerp, smoothstep } from './core/noise.js';
 
@@ -84,7 +85,7 @@ class Game {
       if (!this.started || this.paused || this.photo) return;
       this.audio.click(); this.interact.act();
     };
-    this.input.onTap = () => { if (this.photo && performance.now() - this.photoT > 250) this.togglePhoto(false); };
+    this.input.onTap = (x, y) => { if (this.photo && performance.now() - this.photoT > 250) this.photoTap(x, y); };
     // body.photo hides the whole HUD (incl. the look zone), so the only exit was the tiny hint that has
     // pointer-events:none -> photo mode could not be left on touch devices. Exit on any tap.
     // (the look zone now stays active in photo mode: drag looks around, a short tap exits via onTap. The old
@@ -121,6 +122,7 @@ class Game {
     window.__game = this;
     if (params.has('autostart')) this.start(false);
     if (params.has('snap')) this.runSnapshots();
+    if (params.has('qaphoto')) setTimeout(() => this.qaPhoto(), 500);
   }
 
   // QA: render scripted shots and POST them to the QA server (tools/qa-server.mjs)
@@ -146,6 +148,8 @@ class Game {
       await fetch('/__snap', { method: 'POST', body: JSON.stringify({ name: sh.name, png, info: { fps: $('fps').textContent, tris: i.render.triangles, calls: i.render.calls, trees: this.world.treeCount, ua: navigator.userAgent, gpu: this.gpuName() } }) }).catch(() => {});
     }
     document.title = 'SNAP DONE'; this.snapping = false;
+    // external QA (PlaywrightConsoleCapture wait_for_selector="#snapdone") waits for this instead of a fixed timer
+    const d = document.createElement('i'); d.id = 'snapdone'; d.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px'; document.body.appendChild(d);
   }
 
   gpuName() {
@@ -170,6 +174,7 @@ class Game {
     // tent
     const tx0 = C.x - 6.5, tz0 = C.z + 3.5;
     this.tent = put(P.buildTent(U), tx0, tz0, 0.9, 0.02);
+    P.settleToGround(this.tent, heightAt); // Lane B: pegs / guy lines followed flat ground (up to 9cm floating)
     this.tentPos = new THREE.Vector3(tx0 + Math.sin(0.9) * 1.8, 0, tz0 + Math.cos(0.9) * 1.8);
     this.world.colliders.add(tx0, tz0, 1.55, 'tent');
     // seats
@@ -185,14 +190,10 @@ class Game {
     // lanterns
     this.lanterns = [];
     const l1 = put(P.buildLantern(), C.x - 4.4, C.z + 5.8); this.lanterns.push(l1);
-    // table w/ lantern (simple folding table)
-    const table = new THREE.Group();
-    const top = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.03, 0.6), new THREE.MeshStandardMaterial({ map: tx.brown_planks_05.diff, normalMap: tx.brown_planks_05.nor, roughness: 0.7 }));
-    top.position.y = 0.7; top.castShadow = top.receiveShadow = true; table.add(top);
-    for (const [a, b] of [[-0.5, -0.25], [0.5, -0.25], [-0.5, 0.25], [0.5, 0.25]]) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.7), new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.4 })); l.position.set(a, 0.35, b); table.add(l); }
-    const l2 = P.buildLantern(); l2.position.y = 0.715; table.add(l2); this.lanterns.push(l2);
-    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.09, 16), new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.3 })); mug.position.set(-0.3, 0.76, 0.1); table.add(mug);
-    put(table, C.x + 4.2, C.z + 4.2, -0.5);
+    // folding table w/ lantern (Lane B: slatted top, rails, cord; the mug moved to campdetail)
+    const table = put(P.buildTable(tx), C.x + 4.2, C.z + 4.2, -0.5);
+    if (table.userData.lantern) this.lanterns.push(table.userData.lantern);
+    this.table = table;
     this.world.colliders.add(C.x + 4.2, C.z + 4.2, 0.6, 'table');
     // string lights between tent and a pole
     // wooden poles for the string lights
@@ -227,27 +228,13 @@ class Game {
       contains: (x, z) => { v.set(x, 0.55, z).applyMatrix4(inv); return Math.abs(v.x) < 1.0 && v.z < 0.3 && v.z > -dockLen; },
     }];
     // rowboat moored at dock
-    this.boat = this.buildBoat(); this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, 0, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
+    this.boat = P.buildRowboat(tx); this.boatCap = this.boat.userData.cap; // Lane B: clinker-built rowboat this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, 0, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
     // hull is 0.45m deep with its rim at local y=0: at +0.02 the rim sat 4cm above the lake (boat looked sunk)
     this.boatBaseY = WORLD.waterLevel + 0.26;
-  }
-
-  buildBoat() {
-    const g = new THREE.Group();
-    const wood = new THREE.MeshStandardMaterial({ map: this.assets.textures.brown_planks_05.diff, color: 0x6b8fa0, roughness: 0.7, side: THREE.DoubleSide });
-    // (an unused LatheGeometry hull used to be built and discarded here)
-    const shell = new THREE.SphereGeometry(1, 32, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2.3);
-    shell.scale(0.8, 0.45, 2.2);
-    const m = new THREE.Mesh(shell, wood); m.castShadow = true; g.add(m);
-    // seat was 1.3m wide in a 1.6m hull at a height where the hull is only ~1.2m wide -> poked through the sides
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.04, 0.25), wood); seat.position.y = -0.12; g.add(seat);
-    // depth-only cap at the waterline: keeps the (transparent, later-drawn) lake surface out of the hull
-    const wl = -0.26, k = Math.sqrt(1 - (wl / 0.45) ** 2);
-    const cap = new THREE.Mesh(new THREE.CircleGeometry(1, 32), new THREE.MeshBasicMaterial({ colorWrite: false }));
-    cap.rotation.x = -Math.PI / 2; cap.scale.set(0.8 * k * 0.97, 2.2 * k * 0.97, 1); cap.position.y = wl; cap.renderOrder = 9;
-    g.add(cap); this.boatCap = cap;
-    g.userData.bobT = 0;
-    return g;
+    // Lane B: ~40 small camp props (chopping block, cooler, stove, sleeping bag, washing line, tackle...)
+    this.campDetails = buildCampDetails({ scene: this.scene, textures: tx, U, heightAt, colliders: this.world.colliders, camp: C,
+      firePos: new THREE.Vector3(fx, heightAt(fx, fz), fz), tent: this.tent, tentOrigin: { x: tx0, z: tz0 }, tentRot: 0.9, poleA, dock: this.dock,
+      dockEnd: this.dockEnd, boat: this.boat, table });
   }
 
   buildStringLights(a, b) {
@@ -278,6 +265,16 @@ class Game {
     $('btnResume').onclick = () => { $('menu').classList.add('hidden'); this.paused = false; this.input.reset(); this.applyOptions(); };
     $('btnSave').onclick = () => { const ok = this.saveGame(); this.ui.toast(ok ? '💾 セーブしました' : '⚠ セーブできませんでした'); };
     $('btnPhoto').onclick = () => this.togglePhoto(true);
+    const tapBtn = (id, fn) => { const el = $(id); el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); fn(); }, { passive: false }); el.addEventListener('mousedown', (e) => { if (e.button === 0) { e.stopPropagation(); fn(); } }); };
+    tapBtn('btnShutter', () => this.shutter());
+    tapBtn('btnPhotoExit', () => this.togglePhoto(false));
+    tapBtn('photoThumb', () => this.savePhoto());
+    // keyboard: P / Enter = shutter, Esc = leave camera
+    window.addEventListener('keydown', (e) => {
+      if (!this.photo || e.repeat) return;
+      if (e.code === 'Enter' || e.code === 'KeyP') { e.preventDefault(); this.shutter(); }
+      else if (e.code === 'Escape') this.togglePhoto(false);
+    });
     const sens = store.get('modan-sens'); if (sens && Number.isFinite(+sens)) $('optSens').value = sens;
     const vol = store.get('modan-vol'); if (vol && Number.isFinite(+vol)) $('optVol').value = vol;
     // the time-speed option was never persisted
@@ -366,6 +363,7 @@ class Game {
     return this.state.save({ player: { x: this.player.pos.x, z: this.player.pos.z, yaw: this.player.yaw } });
   }
 
+  // ---- photo mode = camera app: viewfinder (lens bar stays), tap = focus point, shutter = capture
   togglePhoto(on) {
     if (!!this.photo === on) return;
     if (on && (!this.started || this.paused || this.interact.mode || this.interact.busy)) return; // not during minigames / sleep
@@ -373,30 +371,105 @@ class Game {
     this.input.reset();
     document.body.classList.toggle('photo', on);
     $('photoHint').classList.toggle('hidden', !on);
+    $('photoUI').classList.toggle('hidden', !on);
     this.viewmodel.root.visible = !on;
-    // focus on whatever is in the center
-    let fd = 8;
-    if (on) {
-      // terrain/water: march the analytic heightfield (a brute-force raycast against the ~400k-triangle terrain
-      // stalled the frame for tens of ms, and water was ignored); props: normal raycast on small meshes
-      const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(0, 0), this.camera); rc.far = 200;
-      const o = rc.ray.origin, d = rc.ray.direction;
-      for (let t = 0.5; t < 200; t += Math.max(0.25, t * 0.02)) {
-        const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t;
-        if (y <= Math.max(heightAt(x, z), WORLD.waterLevel)) { fd = t; break; }
-      }
-      const hit = rc.intersectObjects([this.tent, this.fireRing, this.dock, this.boat], true)[0];
-      if (hit && hit.distance < fd) fd = hit.distance;
-      const f = document.createElement('div'); f.id = 'flash'; document.body.appendChild(f);
-      requestAnimationFrame(() => { f.style.opacity = 0.8; setTimeout(() => { f.style.opacity = 0; setTimeout(() => f.remove(), 500); }, 80); });
-      this.audio.tone(2400, 0.05, 0.12, 'square', 0.5, 0, 0); this.audio.burst(3000, 1, 0.2, 0.08);
-      // night sky photo quest
-      const dir = new THREE.Vector3(); this.camera.getWorldDirection(dir);
-      if (this.sky.info.night > 0.7 && dir.y > 0.25 && (this.rain || 0) < 0.3) { this.state.flags.nightPhoto = true; setTimeout(() => this.ui.toast('🌌 満天の星空を撮影した！'), 600); }
-      else if (this.sky.info.night > 0.7 && dir.y > 0.25) setTimeout(() => this.ui.toast('雲で星が見えない…雨が止むのを待とう'), 600);
-      else if (this.sky.info.night > 0.7) setTimeout(() => this.ui.toast('ヒント：空を見上げて撮ろう'), 600);
+    this.R.setPhotoMode(on, on ? this.focusAt(0, 0) : 8);
+    if (on) this.showAF(0, 0, false);
+  }
+
+  // distance along the view ray through NDC (nx, ny): analytic heightfield march for terrain/water (a raycast
+  // against the ~400k-triangle terrain stalled the frame for tens of ms), normal raycast for props
+  focusAt(nx, ny) {
+    const rc = this._rc || (this._rc = new THREE.Raycaster()), v2 = this._v2 || (this._v2 = new THREE.Vector2());
+    rc.setFromCamera(v2.set(nx, ny), this.camera); rc.far = 400;
+    const o = rc.ray.origin, d = rc.ray.direction;
+    let fd = 60;
+    for (let t = 0.3; t < 400; t += Math.max(0.2, t * 0.015)) {
+      const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t;
+      if (y <= Math.max(heightAt(x, z), WORLD.waterLevel)) { fd = t; break; }
     }
-    this.R.setPhotoMode(on, fd);
+    const hit = rc.intersectObjects([this.tent, this.fireRing, this.dock, this.boat, this.table, this.campDetails?.group, this.woodpile, this.tripod].filter(Boolean), true)[0];
+    if (hit && hit.distance < fd) fd = hit.distance;
+    return fd;
+  }
+
+  // AF bracket at screen point; `lock` = green (focus confirmed) + beep
+  showAF(nx, ny, lock = true) {
+    const el = $('afBox');
+    el.style.left = `${(nx * 0.5 + 0.5) * 100}%`; el.style.top = `${(0.5 - ny * 0.5) * 100}%`;
+    el.classList.remove('lock', 'run'); void el.offsetWidth; el.classList.add('run');
+    if (lock) setTimeout(() => { el.classList.add('lock'); this.audio.tone(3200, 0.03, 0.05, 'sine', 1, 0, 0); setTimeout(() => this.audio.tone(3200, 0.03, 0.05, 'sine', 1, 0, 0), 70); }, 220);
+    const fd = this.R.focusDist;
+    $('afDist').textContent = fd >= 100 ? '∞' : fd >= 10 ? `${fd.toFixed(0)}m` : `${fd.toFixed(1)}m`;
+  }
+
+  // tap in the viewfinder: focus there (look drags are filtered out by Input's tap detection)
+  photoTap(cx, cy) {
+    const nx = (cx / window.innerWidth) * 2 - 1, ny = 1 - (cy / window.innerHeight) * 2;
+    this.R.setPhotoMode(true, this.focusAt(nx, ny));
+    this.showAF(nx, ny, true);
+  }
+
+  // QA: exercise the camera app end-to-end in the real game and log a JSON verdict (external browser run)
+  async qaPhoto() {
+    const L = this.R.lens, out = {};
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    this.togglePhoto(true); await wait(300);
+    out.ui = !$('photoUI').classList.contains('hidden') && getComputedStyle($('lensbar')).display !== 'none';
+    out.dofOn = this.R.dofPass.enabled; out.focus0 = +this.R.focusDist.toFixed(2);
+    this.photoTap(window.innerWidth * 0.5, window.innerHeight * 0.85); await wait(300);
+    out.focusNear = +this.R.focusDist.toFixed(2); out.af = $('afDist').textContent;
+    L.setZoom(20, true); this.frame(1 / 30); out.range20 = +this.R.dof.cocMaterial.focusRange.toFixed(3);
+    L.setZoom(1, true); this.frame(1 / 30); out.range1 = +this.R.dof.cocMaterial.focusRange.toFixed(3);
+    this.shutter(); await wait(500);
+    out.album = this.album?.length || 0; out.jpgKB = this.album ? Math.round(this.album[0].url.length * 0.75 / 1024) : 0;
+    out.thumb = !$('photoThumb').classList.contains('hidden');
+    this._shooting = false; L.setZoom(40, true); this.frame(1 / 30); this.shutter(); await wait(400);
+    out.album2 = this.album?.length; out.label2 = this.album?.at(-1)?.zoom;
+    this.togglePhoto(false); await wait(200);
+    out.exited = $('photoUI').classList.contains('hidden') && !this.R.dofPass.enabled;
+    out.pass = out.ui && out.dofOn && out.focusNear < out.focus0 && out.range20 < out.range1 && out.album === 1 && out.jpgKB > 5 && out.thumb && out.album2 === 2 && out.label2 === '40×' && out.exited;
+    console.log('[qaphoto]', JSON.stringify(out));
+    const d = document.createElement('i'); d.id = 'snapdone'; document.body.appendChild(d);
+  }
+
+  shutter() {
+    if (!this.photo || this._shooting) return;
+    this._shooting = true;
+    // render one clean frame (no HUD in WebGL anyway) and grab it right away: the drawing buffer is cleared
+    // after compositing, so toDataURL must run in the same task as the render
+    this.R.render(0);
+    let url = null;
+    try { url = this.R.r.domElement.toDataURL('image/jpeg', 0.92); } catch { /* tainted / lost context */ }
+    const f = document.createElement('div'); f.id = 'flash'; document.body.appendChild(f);
+    requestAnimationFrame(() => { f.style.opacity = 0.85; setTimeout(() => { f.style.opacity = 0; setTimeout(() => f.remove(), 500); }, 70); });
+    this.audio.tone(2400, 0.05, 0.12, 'square', 0.5, 0, 0); this.audio.burst(3000, 1, 0.2, 0.08);
+    navigator.vibrate?.(30);
+    if (url && url.length > 2000) this.addToAlbum(url);
+    // night sky photo quest (now needs an actual shot, not just opening the camera)
+    const dir = this._pd || (this._pd = new THREE.Vector3()); this.camera.getWorldDirection(dir);
+    const night = this.sky.info.night;
+    if (night > 0.7 && dir.y > 0.25 && (this.rain || 0) < 0.3) { this.state.flags.nightPhoto = true; setTimeout(() => this.ui.toast('🌌 満天の星空を撮影した！'), 500); }
+    else if (night > 0.7 && dir.y > 0.25) setTimeout(() => this.ui.toast('雲で星が見えない…雨が止むのを待とう'), 500);
+    else if (night > 0.7) setTimeout(() => this.ui.toast('ヒント：空を見上げて撮ろう'), 500);
+    else setTimeout(() => this.ui.toast(`📷 撮影しました（${this.R.lens.label()} · ${Math.round(this.R.lens.focalMM)}mm）`), 400);
+    setTimeout(() => { this._shooting = false; }, 350);
+  }
+
+  // in-memory album (last 12 shots) + thumbnail; tapping the thumbnail saves / shares the newest photo
+  addToAlbum(url) {
+    this.album = this.album || [];
+    this.album.push({ url, t: Date.now(), zoom: this.R.lens.label() });
+    if (this.album.length > 12) this.album.shift();
+    const th = $('photoThumb'); th.style.backgroundImage = `url(${url})`; th.classList.remove('hidden', 'pop'); void th.offsetWidth; th.classList.add('pop');
+  }
+
+  savePhoto() {
+    const p = this.album?.at(-1); if (!p) return;
+    const d = new Date(p.t), pad = (n) => String(n).padStart(2, '0');
+    const a = document.createElement('a'); a.href = p.url; a.download = `modancamp_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.jpg`;
+    document.body.appendChild(a); a.click(); a.remove();
+    this.ui.toast('💾 写真を保存しました');
   }
 
   shake(a) { this.shakeAmt = Math.max(this.shakeAmt || 0, a); }
@@ -502,7 +575,7 @@ class Game {
 
     // world systems
     this.world.update(dt, this.camera, lens.lodBias());
-    this.grass.update(dt, this.camera.position, this.player.pos, night, this.world.U.uWind.value);
+    this.grass.update(dt, this.camera.position, this.player.pos, night, this.world.U.uWind.value, lens.zoom);
     this.fire.update(dt, this.world.U.uWind.value, this.rain);
     this.fireLogs.userData.charred && (this.fireLogs.userData.charred.emissiveIntensity = this.fire.intensity * 2.5);
     if (this.fire.fuel <= 0.01 && !this.fire.lit) this.fireLogs.visible = false;

@@ -63,8 +63,8 @@
     <!-- lens: 0.5x ultra-wide .. 20x optical .. 40x (2x digital). Tap a preset, drag the strip, pinch or wheel -->
     <div id="lensbar" aria-label="ズーム">
       <div id="lensTrack"><i id="lensFill"></i><b id="lensKnob"></b></div>
-      <div id="lensPresets"></div>
     </div>
+    <div id="lensPresets"></div>
     <div id="lensRead" class="hidden"><span id="lensZ">1×</span><small id="lensMM">24mm</small><em id="lensMode"></em></div>
     <div id="toast"></div>
     <div id="joyzone"><div id="joybase"><div id="joyknob"></div></div></div>
@@ -106,7 +106,15 @@
     </div>
   </div>
 
-  <div id="photoHint" class="hidden">写真モード · 画面をタップで戻る</div>
+  <div id="photoHint" class="hidden">タップでピント · ドラッグで構図 · ピンチでズーム</div>
+  <!-- camera UI (photo mode) -->
+  <div id="photoUI" class="hidden">
+    <div id="afBox"><span id="afDist"></span></div>
+    <div id="grid3"></div>
+    <button id="btnPhotoExit" aria-label="カメラを閉じる">✕</button>
+    <button id="btnShutter" aria-label="シャッター"><i></i></button>
+    <button id="photoThumb" class="hidden" aria-label="最新の写真を保存"></button>
+  </div>
   <div id="fps" class="hidden"></div>
   <div id="fade"></div>
 
