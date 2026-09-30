@@ -12,3 +12,4 @@ assets-src/models/*/textures
 .agents/.inbox-*
 .agents/.pr-*
 tools/.git-lock
+.agents/bg/
