@@ -20,3 +20,9 @@ audit('woodpile', C.x - 3.5, C.z - 2.2, 0.6, 0, [[-0.4, 0, 0.005], [0.4, 0, 0.00
 audit('table', C.x + 4.2, C.z + 4.2, -0.5, 0, [[-0.5, -0.25], [0.5, -0.25], [-0.5, 0.25], [0.5, 0.25]]);
 audit('lantern1', C.x - 4.4, C.z + 5.8, 0, 0, [[0.09, 0], [-0.09, 0], [0, 0.09], [0, -0.09]]);
 console.log('camp', C, 'h', heightAt(C.x, C.z).toFixed(2));
+// verify settleToGround: sample the corrected stake heights (same maths as props.settleToGround rigid branch)
+{
+  const [ox, oz, ry] = [C.x - 6.5, C.z + 3.5, 0.9], base = heightAt(ox, oz);
+  let worst = 0; for (const [lx, lz] of st) { const [dx, dz] = rot(lx, lz, ry); const h = heightAt(ox + dx, oz + dz); const y = base + 0.02 + 0.03 + (h - base) * (1 - 0.03 / 0.7); worst = Math.max(worst, Math.abs(y - 0.03 - h)); }
+  console.log('tent-stakes after settle: worst', worst.toFixed(3), 'm');
+}

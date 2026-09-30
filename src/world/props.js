@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { heightAt } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
+import { Batch, T, kitMaterials, rbox, box, cyl, tube, loft, sphere, torus } from './propkit.js';
 
 // deterministic 0..1 hash of a position (identical for coincident vertices of non-indexed geometry)
 export function posHash(x, y, z, seed = 0) {
@@ -396,4 +397,136 @@ export function buildAxe(textures) {
 export function placeOnGround(obj, x, z, yOff = 0, alignNormal = false) {
   obj.position.set(x, heightAt(x, z) + yOff, z);
   return obj;
+}
+
+// Drape a placed prop group onto the terrain: parts near the ground (tent tub, fly hem, guy lines, stakes) follow
+// the real slope instead of the flat plane through the group origin (stakes floated up to 9cm on the downhill
+// side, see tools/b/ground-check.mjs). Small parts move rigidly, large ones get per-vertex displacement weighted
+// by height (1 at the ground -> 0 at `top`). Call once after the group is positioned/rotated.
+export function settleToGround(group, heightFn, top = 0.7) {
+  if (group.userData.settled) return group;
+  group.updateMatrixWorld(true);
+  const base = group.position.y - (group.userData.groundLift || 0), v = new THREE.Vector3(), mi = new THREE.Matrix4();
+  const delta = (lx, ly, lz) => { v.set(lx, ly, lz).applyMatrix4(group.matrixWorld); return heightFn(v.x, v.z) - base; };
+  const w = (y) => 1 - Math.min(1, Math.max(0, y / top));
+  for (const m of group.children) {
+    if (!m.isMesh) continue;
+    const g = m.geometry; if (!g.boundingSphere) g.computeBoundingSphere();
+    m.updateMatrix();
+    if (g.boundingSphere.radius < 0.2) { // stakes, pole tips, tensioners: rigid move
+      const k = w(m.position.y); if (k > 0) m.position.y += delta(m.position.x, m.position.y, m.position.z) * k;
+      continue;
+    }
+    const ng = g.clone(), p = ng.attributes.position; mi.copy(m.matrix).invert();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i).applyMatrix4(m.matrix); const k = w(v.y); if (k <= 0) continue;
+      const lx = v.x, ly = v.y, lz = v.z, d = delta(lx, ly, lz) * k;
+      v.set(lx, ly + d, lz).applyMatrix4(mi); p.setXYZ(i, v.x, v.y, v.z);
+    }
+    ng.computeVertexNormals(); ng.computeBoundingSphere(); m.geometry = ng;
+  }
+  group.userData.settled = true;
+  return group;
+}
+
+// Folding camp table: roll-up wooden slat top (1.1 x 0.6, surface at y=0.715), aluminium frame, X legs with a
+// centre pivot and rubber feet. userData.lantern = the lantern standing on it (lit by main.js like the others).
+export function buildTable(textures) {
+  const g = new THREE.Group(), M = kitMaterials(textures), B = new Batch(), R = mulberry32(21);
+  const Y = 0.715, W = 1.1, D = 0.6, n = 13, sw = D / n;
+  for (let i = 0; i < n; i++) {
+    const z = -D / 2 + sw * (i + 0.5), c = [0xc89a64, 0xbf915c, 0xd0a36c][i % 3];
+    B.add(rbox(W, 0.018, sw - 0.004, 0.004, 1), M.wood, T(0, Y - 0.009, z, 0, 0, 0), c, { shade: (p, nn, cc) => { cc.multiplyScalar(0.92 + 0.08 * Math.sin(p.x * 9 + i)); } });
+  }
+  // cord holding the slats + aluminium side rails
+  for (const x of [-0.42, 0.42]) B.add(cyl(0.003, 0.003, D, 6).rotateX(Math.PI / 2), M.rope, T(x, Y - 0.02, 0), 0x333333);
+  for (const sz of [-1, 1]) B.add(rbox(W - 0.04, 0.025, 0.018, 0.004), M.metal, T(0, Y - 0.03, sz * (D / 2 - 0.02)), 0xb8bcc2);
+  for (const sx of [-1, 1]) B.add(rbox(0.018, 0.025, D - 0.04, 0.004), M.metal, T(sx * (W / 2 - 0.05), Y - 0.03, 0), 0xb8bcc2);
+  // X legs at each end + pivot bolts + feet
+  for (const sx of [-1, 1]) {
+    const x = sx * (W / 2 - 0.08);
+    for (const sz of [-1, 1]) {
+      const a = new THREE.Vector3(x, 0.012, sz * 0.26), b = new THREE.Vector3(x, Y - 0.045, -sz * 0.26);
+      B.add(loft([a, a.clone().lerp(b, 0.5), b], () => [0.011, 0.011], 4, 10), M.metal, null, 0xa8adb3);
+      B.add(rbox(0.03, 0.02, 0.05, 0.008), M.rubber, T(x, 0.01, sz * 0.26), 0x1a1a1a);
+    }
+    B.add(cyl(0.009, 0.009, 0.04, 10).rotateZ(Math.PI / 2), M.metal, T(x, (Y - 0.03) / 2, 0), 0x6a6e72);
+  }
+  B.add(loft([[-(W / 2 - 0.08), 0.2, 0.2], [0, 0.2, 0.2], [W / 2 - 0.08, 0.2, 0.2]], () => [0.008, 0.008], 3, 8), M.metal, null, 0xa8adb3); // brace
+  B.add(tube([[-(W / 2 - 0.08), 0.2, -0.2], [0, 0.14, -0.2], [W / 2 - 0.08, 0.2, -0.2]], 0.006, 12, 6), M.metal, null, 0x9aa0a6);
+  void R;
+  B.build(g, 'table');
+  const l = buildLantern(); l.position.set(-0.05, Y, 0.12); g.add(l); g.userData.lantern = l;
+  return g;
+}
+
+// Clinker-built wooden rowboat (3.6m). Hull from an analytic section so the waterline cap matches exactly.
+// Rim (gunwale) at local y=0, keel at -D. userData.cap = depth-only waterline mesh (hides the lake inside),
+// main.js keeps using boatBaseY = waterLevel + 0.26 (waterline at local y=-0.26).
+export function buildRowboat(textures, waterlineY = -0.26) {
+  const g = new THREE.Group(), M = kitMaterials(textures), B = new Batch();
+  const L = 1.8, D = 0.45, P = 2.3;
+  const beam = (u) => 0.66 * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(u), u < 0 ? 2.0 : 3.2)), u < 0 ? 0.62 : 0.4) + (u > 0 ? 0.3 * Math.pow(u, 6) : 0); // bow at -z, transom at +z
+  const depth = (u) => D * (1 - 0.18 * u * u) + (u < 0 ? 0.0 : 0);
+  const sheer = (u) => 0.1 * Math.pow(Math.abs(u), 2.2) * (u < 0 ? 1.3 : 0.6);
+  const pt = (u, sN, off = 0) => { const b = Math.max(0.004, beam(u) - off), d = depth(u) - off; return [b * sN, -d * (1 - Math.pow(Math.abs(sN), P)) + sheer(u), u * L * (u > 0 ? 0.98 : 1)]; };
+  const US = 40, SS = 24, strakes = 6;
+  const hull = (off, colorOut) => {
+    const pos = [], uv = [], idx = [];
+    for (let i = 0; i <= US; i++) for (let j = 0; j <= SS; j++) {
+      const u = -1 + 2 * i / US, sN = -1 + 2 * j / SS; const [x, y, z] = pt(u, sN, off);
+      // clinker steps: each strake overlaps the next -> small outward lip
+      const st = Math.abs(sN) * strakes, f = st - Math.floor(st); const lip = off === 0 ? 0.006 * Math.pow(f, 3) : 0;
+      pos.push(x + Math.sign(sN) * lip, y, z); uv.push(u * 3, Math.abs(sN) * 0.8);
+    }
+    for (let i = 0; i < US; i++) for (let j = 0; j < SS; j++) { const a = i * (SS + 1) + j, b = a + SS + 1; if (off === 0) idx.push(a, a + 1, b, a + 1, b + 1, b); else idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals();
+    return geo;
+  };
+  const planks = textures.brown_planks_05;
+  const hullMat = new THREE.MeshStandardMaterial({ name: 'hull', vertexColors: true, map: planks.diff, normalMap: planks.nor, roughness: 0.75 });
+  // painted outside: white topsides, green-blue below a waterline stripe, fouling at the bottom
+  B.add(hull(0, 0), hullMat, null, 0xffffff, { shade: (p, n, c) => {
+    const y = p.y; if (y > -0.06) c.setRGB(0.86, 0.84, 0.78); else if (y > -0.1) c.setRGB(0.55, 0.12, 0.08); else c.setRGB(0.18, 0.36, 0.42);
+    const st = Math.abs(p.x) / 0.7 * strakes; if ((st % 1) > 0.9) c.multiplyScalar(0.8);
+    if (y < -0.3) c.multiplyScalar(0.75); if (y < waterlineY + 0.02 && y > waterlineY - 0.03) c.multiplyScalar(0.85);
+  } });
+  B.add(hull(0.018, 0), hullMat, null, 0xb89a74, { shade: (p, n, c) => { if (p.y < -0.38) c.multiplyScalar(0.6); } }); // varnished inside
+  // transom board
+  const tr = new THREE.Shape(); const uT = 1; for (let j = 0; j <= 16; j++) { const sN = -1 + 2 * j / 16; const [x, y] = pt(uT, sN); j ? tr.lineTo(x, y) : tr.moveTo(x, y); } tr.closePath();
+  B.add(new THREE.ExtrudeGeometry(tr, { depth: 0.03, bevelEnabled: false }), hullMat, T(0, 0, L * 0.98 - 0.015), 0xc8a878);
+  // gunwale rails, stem, keel
+  for (const sN of [-1, 1]) { const pts = []; for (let i = 0; i <= 30; i++) { const u = -1 + 2 * i / 30; const [x, y, z] = pt(u, sN); pts.push(new THREE.Vector3(x, y + 0.012, z)); } B.add(loft(pts, () => [0.022, 0.02], 60, 6), M.wood, null, 0x6a4a2a); }
+  // stem post: from the keel at the bow up past the sheer
+  { const [, yk, zb] = pt(-1, 0), top = sheer(-1) + 0.05, stem = []; for (let j = 0; j <= 10; j++) stem.push(new THREE.Vector3(0, yk + (top - yk) * j / 10, zb - 0.012)); B.add(loft(stem, () => [0.025, 0.02], 10, 6), M.wood, null, 0x6a4a2a); }
+  { const pts = []; for (let i = 0; i <= 20; i++) { const u = -0.98 + 1.96 * i / 20; const [, y, z] = pt(u, 0); pts.push(new THREE.Vector3(0, y - 0.015, z)); } B.add(loft(pts, () => [0.02, 0.03], 30, 6), M.wood, null, 0x2a3a3a); }
+  // ribs (frames) inside
+  for (let i = 1; i < 12; i++) { const u = -0.85 + i * 0.145; const pts = []; for (let j = 0; j <= 12; j++) { const sN = -0.96 + 1.92 * j / 12; const [x, y, z] = pt(u, sN, 0.024); pts.push(new THREE.Vector3(x, y, z)); } B.add(loft(pts, () => [0.012, 0.018], 16, 4), M.wood, null, 0xa88a64); }
+  // floorboards + thwarts (seats) + knees + oarlocks
+  for (let k = -2; k <= 2; k++) B.add(box(0.1, 0.015, 2.1), M.wood, T(k * 0.11, -D + 0.08, 0.1), 0xb89a74);
+  const thwart = (u, h) => { const [x] = pt(u, 1, 0.02); const [, y] = pt(u, 1); B.add(rbox(x * 2, 0.03, 0.22, 0.006), M.wood, T(0, y - h, u * L), 0xd8c8a8); };
+  thwart(-0.35, 0.2); thwart(0.2, 0.2); thwart(0.78, 0.2);
+  for (const sN of [-1, 1]) { const [x, y, z] = pt(0.02, sN); B.add(cyl(0.008, 0.008, 0.06, 8), M.metal, T(x * 0.99, y + 0.05, z), 0xc9a15a); B.add(torus(0.025, 0.005, 6, 12, Math.PI), M.metal, T(x * 0.99, y + 0.08, z, 0, Math.PI / 2, 0), 0xc9a15a); }
+  // two oars lying inside, blades on the stern thwart
+  for (const sN of [-1, 1]) {
+    const a = new THREE.Vector3(sN * 0.2, -0.22, -1.25), b = new THREE.Vector3(sN * 0.24, -0.16, 1.0);
+    B.add(loft([a, a.clone().lerp(b, 0.5), b], () => [0.018, 0.018], 6, 8), M.wood, null, 0xd8b88a);
+    B.add(rbox(0.13, 0.012, 0.5, 0.005), M.wood, T(b.x, b.y + 0.01, b.z + 0.25, 0.06, 0, 0), 0xc8a070, { shade: (p, n, c) => { if (p.z > b.z + 0.42) c.setRGB(0.6, 0.12, 0.08); } });
+    B.add(cyl(0.02, 0.02, 0.1, 10).rotateX(Math.PI / 2), M.rubber, T(a.x, a.y, a.z - 0.02), 0x2a2a2a);
+  }
+  // bow ring + painter rope trailing into the water
+  const [, by, bz] = pt(-1, 0); B.add(torus(0.025, 0.005, 6, 14), M.metal, T(0, sheer(-1) - 0.08, bz - 0.03, 0, 0, 0), 0x9a9a9a);
+  B.add(tube([[0, sheer(-1) - 0.1, bz - 0.04], [0.05, -0.2, bz - 0.2], [0.1, -0.32, bz - 0.5], [0.2, -0.3, bz - 0.9]], 0.009, 16, 5), M.rope, null, 0xc8b890); void by;
+  B.build(g, 'boat');
+  g.traverse((o) => { if (o.isMesh) o.material.side = o.material === hullMat ? THREE.FrontSide : o.material.side; });
+  hullMat.side = THREE.DoubleSide;
+  // waterline cap (depth only) following the hull section exactly
+  const cs = new THREE.Shape(); const pts = [];
+  for (let i = 0; i <= 40; i++) { const u = -1 + 2 * i / 40, d = depth(u), sy = waterlineY - sheer(u); const k = sy >= 0 ? 1 : Math.pow(Math.max(0, 1 + sy / d), 1 / P); pts.push([Math.max(0, beam(u) - 0.02) * k, u * L * (u > 0 ? 0.98 : 1)]); }
+  pts.forEach(([x, z], i) => (i ? cs.lineTo(x, z) : cs.moveTo(x, z))); for (let i = pts.length - 1; i >= 0; i--) cs.lineTo(-pts[i][0], pts[i][1]);
+  const capG = new THREE.ShapeGeometry(cs); capG.rotateX(Math.PI / 2); // shape (x, y=z) -> xz plane
+  const cap = new THREE.Mesh(capG, new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide }));
+  cap.position.y = waterlineY; cap.renderOrder = 9; g.add(cap);
+  g.userData.cap = cap; g.userData.bobT = 0;
+  return g;
 }

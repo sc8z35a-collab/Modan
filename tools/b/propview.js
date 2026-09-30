@@ -35,6 +35,9 @@ put(P.buildChair(), fx + 0.4, fz + 2.6, Math.atan2(0.4, 2.6));
 put(P.buildWoodPile(tx), C.x - 3.5, C.z - 2.2, 0.6);
 const lanterns = [put(P.buildLantern(), C.x - 4.4, C.z + 5.8)];
 if (P.buildTable) { const t = put(P.buildTable(tx), C.x + 4.2, C.z + 4.2, -0.5); if (t.userData.lantern) lanterns.push(t.userData.lantern); }
+if (P.settleToGround) P.settleToGround(tent, heightAt);
+// water plane + boat (for q.has('boat')): boat at camp +(0,0,-6) floating at waterline
+if (q.has('boat') && P.buildRowboat) { const bt = P.buildRowboat(tx); const by = heightAt(C.x, C.z) + 0.6; bt.position.set(C.x, by, C.z - 6); bt.rotation.y = 0.6; scene.add(bt); const wm = new THREE.Mesh(new THREE.PlaneGeometry(8, 8).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2a4a55, roughness: 0.1, transparent: true, opacity: 0.75 })); wm.position.set(C.x, by - 0.26, C.z - 6); scene.add(wm); }
 let details = null;
 if (q.get('details') !== '0') {
   try { const m = await import('../../src/world/campdetail.js'); details = m.buildCampDetails({ scene, textures, U, heightAt, colliders, camp: { x: C.x, z: C.z }, tentPos: new THREE.Vector3(tx0, 0, tz0), tentRot: 0.9, firePos: new THREE.Vector3(fx, heightAt(fx, fz), fz), night }); } catch (e) { console.warn('campdetail', e.message); }
