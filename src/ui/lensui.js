@@ -20,6 +20,7 @@ export class LensUI {
       const go = (e) => { e.preventDefault(); e.stopPropagation(); this.g.audio?.click?.(); this.lens.setZoom(p); };
       b.addEventListener('touchstart', go, { passive: false });
       b.addEventListener('mousedown', (e) => { if (e.button === 0) go(e); });
+      // chips sit at their true log position next to the strip (so the knob lines up with the chip it snaps to)
       pr.appendChild(b);
       return b;
     });
@@ -49,6 +50,9 @@ export class LensUI {
   poke() { this.hideT = 1.6; this.read.classList.remove('hidden', 'fade'); }
 
   update(dt) {
+    // the minigame panel sits at the bottom centre: hide the chips while it is open
+    const busy = !!(this.g.interact?.mode || this.g.interact?.busy);
+    if (busy !== this._busy) { this._busy = busy; this.btns[0].parentElement.classList.toggle('busy', busy); }
     if (this.hideT > 0) { this.hideT -= dt; if (this.hideT <= 0) this.read.classList.add('fade'); }
     this.render();
   }

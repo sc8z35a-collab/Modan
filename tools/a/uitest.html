@@ -1,0 +1,27 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><link rel="stylesheet" href="../../src/ui/style.css"></head>
+<body><div id="hud">
+<div id="topright"><button class="icon-btn" id="btnPhoto">📷</button><button class="icon-btn" id="btnMenu">☰</button></div>
+<div id="crosshair"></div>
+<div id="lensbar"><div id="lensTrack"><i id="lensFill"></i><b id="lensKnob"></b></div></div><div id="lensPresets"></div>
+<div id="lensRead" class="hidden"><span id="lensZ">1×</span><small id="lensMM">24mm</small><em id="lensMode"></em></div>
+<div id="joyzone"><div id="joybase"><div id="joyknob"></div></div></div><div id="lookzone"></div>
+<div id="actions"><button id="btnAction" class="act">調べる</button><button id="btnRun" class="round">走</button><button id="btnCrouch" class="round">屈</button></div>
+</div>
+<script type="module">
+// DOM-only harness for the lens UI + Input (no WebGL) — runs in ~2s in the sandbox
+import * as THREE from 'three';
+import { Lens } from '../../src/core/lens.js';
+import { Input } from '../../src/core/input.js';
+import { LensUI } from '../../src/ui/lensui.js';
+const cam = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.1, 100);
+const lens = new Lens(cam); lens.setBaseFov(64);
+const input = new Input();
+const g = { R: { lens }, audio: null, started: true };
+const ui = new LensUI(g);
+input.onZoom = (k) => lens.zoomBy(k); input.onZoomStep = (d) => lens.step(d);
+let last = performance.now();
+const tick = (t) => { const dt = Math.min(0.05, (t - last) / 1000); last = t; input.keyZoom(dt); lens.update(dt); input.lookScale = lens.lookScale(); ui.update(dt); requestAnimationFrame(tick); };
+requestAnimationFrame(tick);
+window.__t = { lens, input, cam };
+document.title = 'READY';
+</script></body></html>
