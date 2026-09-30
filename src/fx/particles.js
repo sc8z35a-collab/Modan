@@ -40,7 +40,7 @@ export class Particles {
         void main(){ vec3 p = position; p.y = mod(p.y - uTime*(14.0+aSeed*4.0), 20.0) - 6.0;
           p.xz = mod(p.xz - uCam.xz + 20.0, 40.0) - 20.0; p += vec3(uCam.x, uCam.y, uCam.z);
           vec4 mv = viewMatrix*vec4(p,1.0); vA = step(aSeed, 1.0);
-          gl_PointSize = clamp(3.0 * (6.0 / max(-mv.z, 0.05)) * uPR, 0.0, 64.0); gl_Position = projectionMatrix*mv; }`,
+          gl_PointSize = clamp(3.0 * (6.0 / max(-mv.z, 0.05)) * (projectionMatrix[1][1] * 0.7002) * uPR, 0.0, 64.0); gl_Position = projectionMatrix*mv; }`,
       fragmentShader: `uniform float uAmt; void main(){ vec2 c = gl_PointCoord-0.5; float a = smoothstep(0.08,0.0,abs(c.x)) * (1.0-abs(c.y)*2.0) * uAmt * 0.45; gl_FragColor = vec4(vec3(0.75,0.8,0.9)*a, a); }`,
     }));
     this.rain.frustumCulled = false; this.rain.visible = false;
@@ -59,7 +59,7 @@ export class Particles {
       uniforms: this.splashU, transparent: true, depthWrite: false,
       vertexShader: `attribute float aAge; uniform float uPR; varying float vAge;
         void main(){ vAge = aAge; vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = clamp((4.0 + aAge * 10.0) * (6.0 / max(-mv.z, 0.05)) * uPR, 0.0, 48.0); gl_Position = projectionMatrix * mv; }`,
+          gl_PointSize = clamp((4.0 + aAge * 10.0) * (6.0 / max(-mv.z, 0.05)) * (projectionMatrix[1][1] * 0.7002) * uPR, 0.0, 48.0); gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `uniform float uAmt; varying float vAge;
         void main(){ vec2 c = gl_PointCoord - 0.5; c.y *= 1.6; float d = length(c);
           float ring = smoothstep(0.08, 0.0, abs(d - vAge * 0.42)) * (1.0 - vAge);
@@ -108,7 +108,7 @@ export class Particles {
           float fwd = pow(max(dot(V, normalize(uSun)), 0.0), 6.0);     // forward scattering towards the sun
           float tw = 0.5 + 0.5 * sin(uTime * (1.0 + aSeed * 3.0) + aSeed * 90.0);
           vA = (0.12 + fwd * 1.6) * tw * smoothstep(9.0, 1.0, -mv.z) * smoothstep(0.2, 0.8, -mv.z);
-          gl_PointSize = clamp((1.2 + aSeed) * (6.0 / max(-mv.z, 0.05)) * uPR, 0.0, 16.0); gl_Position = projectionMatrix * mv; }`,
+          gl_PointSize = clamp((1.2 + aSeed) * (6.0 / max(-mv.z, 0.05)) * (projectionMatrix[1][1] * 0.7002) * uPR, 0.0, 16.0); gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `uniform float uAmt; uniform vec3 uCol; varying float vA;
         void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.0, d) * vA * uAmt; if (a < 0.002) discard; gl_FragColor = vec4(uCol * a, a); }`,
     }));
@@ -151,18 +151,28 @@ export class Particles {
         L.p.set(cp.x + Math.cos(a) * r, 0, cp.z + Math.sin(a) * r);
         L.ground = heightAt(L.p.x, L.p.z);
         L.p.y = L.ground + 4 + Math.random() * 6;
-        L.rest = 0;
+        L.rest = 0; L.landed = false;
       }
-      if (L.p.y > L.ground + 0.01) {
+      if (!L.landed) {
         L.ph += dt * L.spin;
         const flutter = Math.sin(L.ph * 1.7);
         L.p.x += (Math.cos(L.ph) * 0.35 + wx * 0.5) * dt;
         L.p.z += (Math.sin(L.ph * 0.8) * 0.35 + wz * 0.5) * dt;
         L.p.y -= (L.fall * (0.7 + 0.5 * Math.abs(flutter)) + rain * 1.5) * dt;
-        const over = L.p.y < WORLD.waterLevel + 0.005 && L.ground < WORLD.waterLevel;
-        if (L.p.y <= L.ground + 0.01 || over) { L.p.y = Math.max(L.ground, WORLD.waterLevel) + 0.01; L.rest = 8 + Math.random() * 10; }
+        // the leaf drifts metres sideways while falling: re-sample the ground under it when it gets close
+        // (the height taken at spawn left leaves hovering / buried on slopes)
+        if (L.p.y < L.ground + 1.5) L.ground = heightAt(L.p.x, L.p.z);
+        const floor = Math.max(L.ground, WORLD.waterLevel) + 0.01; // lands on the lake surface, not the lake bed
+        if (L.p.y <= floor) { L.p.y = floor; L.landed = true; L.rest = 8 + Math.random() * 10; }
         e.set(L.ph * 0.9 + flutter, L.ph * 0.6, Math.cos(L.ph) * 1.2);
-      } else e.set(-Math.PI / 2, L.ph, 0); // lying flat on the ground / floating on the lake
+      } else {
+        if (L.ground < WORLD.waterLevel) { // floating: drift with the wind, bob a little
+          L.p.x += wx * 0.08 * dt; L.p.z += wz * 0.08 * dt; L.ph += dt * 0.2;
+          L.ground = heightAt(L.p.x, L.p.z);
+          if (L.ground >= WORLD.waterLevel) { L.p.y = L.ground + 0.01; L.rest = Math.min(L.rest, 0.01); } // washed ashore -> recycle
+        }
+        e.set(-Math.PI / 2, L.ph, 0); // lying flat on the ground / floating on the lake
+      }
       q.setFromEuler(e);
       m.compose(L.p, q, this._s);
       this.leaves.setMatrixAt(i, m);

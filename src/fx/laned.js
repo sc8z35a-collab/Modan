@@ -20,6 +20,7 @@ export function installLaneD(game) {
     b.className = 'icon-btn'; b.id = 'btnGuide'; b.title = '図鑑'; b.textContent = '📖';
     b.onclick = () => { if (g.photo || !g.started) return; g.audio?.click?.(); guide.open(); };
     tr.insertBefore(b, tr.firstChild);
+    guide.badge(); // restore the NEW-count badge from the save
   }
   const mb = document.querySelector('#menu .menu-btns');
   if (mb && !document.getElementById('btnGuideMenu')) {

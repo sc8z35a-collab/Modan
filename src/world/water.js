@@ -185,6 +185,7 @@ export class Water {
   }
 
   addRipple(x, z, strength = 1) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return; // a NaN ripple made the whole lake shader output NaN (black)
     const r = this.ripples[this.rippleIdx];
     this.rippleIdx = (this.rippleIdx + 1) % this.ripples.length;
     r.set(x, z, this.uniforms.uTime.value, strength);
@@ -192,8 +193,14 @@ export class Water {
 
   resize(w, h) {
     // keep aspect ratio of the screen (clamping each axis separately to 256 distorted reflections on tiny windows)
+    if (!(w > 0 && h > 0)) return; // 0x0 while the tab is hidden / NaN from a torn-down visualViewport
     const k = Math.max(1, 256 / Math.max(1, Math.min(w, h) * this.rtScale));
-    this.rt.setSize(Math.max(1, (w * this.rtScale * k) | 0), Math.max(1, (h * this.rtScale * k) | 0));
+    // cap the long side (4K / ultrawide at pixelRatio 2 asked for 5000+ px reflection targets -> >maxTextureSize
+    // on many phones = incomplete framebuffer, black lake) while keeping the aspect ratio
+    const cap = Math.min(2048, this.renderer.capabilities?.maxTextureSize || 2048);
+    let rw = w * this.rtScale * k, rh = h * this.rtScale * k;
+    const over = Math.max(rw, rh) / cap; if (over > 1) { rw /= over; rh /= over; }
+    this.rt.setSize(Math.max(1, rw | 0), Math.max(1, rh | 0));
   }
 
   update(dt, sky, fire) {

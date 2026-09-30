@@ -60,3 +60,13 @@
 .fg-credit a { color: #6a3f14; }
 .fg-back { font: inherit; align-self: flex-start; margin-top: 1.4vh; font-size: 2vh; padding: 1vh 3vh; border-radius: 99px; border: 0; background: #4a3422; color: #f3e8cc; cursor: pointer; }
 @media (max-height: 420px) { .fg-grid { grid-template-columns: repeat(auto-fill, minmax(22vh, 1fr)); } }
+
+/* NEW stamp on freshly discovered cards + badge on the HUD button */
+.fg-card.new { animation: fg-new 1.6s ease-in-out infinite; }
+@keyframes fg-new { 50% { box-shadow: 0 0.3vh 0.9vh rgba(60,40,15,0.25), 0 0 0 0.4vh rgba(214, 120, 40, 0.55); } }
+.fg-card.new .fg-ph::before { content: "NEW"; position: absolute; z-index: 2; right: 0.6vh; top: 0.6vh; padding: 0.2vh 0.9vh; border-radius: 0.4vh;
+  font: 700 1.5vh/1.4 Georgia, serif; letter-spacing: 0.1em; color: #fff8e8; background: #b8521c; transform: rotate(6deg); box-shadow: 0 0.2vh 0.5vh rgba(0,0,0,0.3); }
+#btnGuide { position: relative; }
+#btnGuide.fg-has-new::after { content: attr(data-badge); position: absolute; right: -0.4vh; top: -0.4vh; min-width: 2.2vh; height: 2.2vh; padding: 0 0.5vh;
+  border-radius: 99px; background: #e2562a; color: #fff; font: 700 1.4vh/2.2vh system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 0.25vh rgba(0,0,0,0.35); animation: fg-pulse 1.4s ease-in-out infinite; }
+@keyframes fg-pulse { 50% { transform: scale(1.18); } }
