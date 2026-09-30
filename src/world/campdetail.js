@@ -486,6 +486,12 @@ export function buildCampDetails(ctx) {
     place(sx, sz, Math.atan2(fx - sx, fz - sz), (gh) => signpost(B, M, R, gh, signMat, arrowMat));
     addCol(sx, sz, 0.35, 'sign');
   }
+  // tent: drop stakes / guy lines / fly hem onto the terrain (they floated up to 9cm on the downhill side)
+  if (ctx.tent && !ctx.tent.userData.settled) settleToGround(ctx.tent, heightAt);
+
+  // two clusters: camp (~20m) and dock (~40m away). One world-spanning merged mesh per material defeated frustum
+  // and shadow-camera culling (the dock items were drawn into the shadow map while standing at the fire).
+  const meshes = B.build(group, 'camp');
   // dock kit (same placement maths as main.js buildCamp)
   if (ctx.dock) {
     ctx.dock.updateMatrixWorld();
@@ -496,10 +502,7 @@ export function buildCampDetails(ctx) {
     let ds = 0; while (ds < 12 && heightAt(px0 + ddx * ds, pz0 + ddz * ds) > 0.62) ds += 0.1;
     B.with(T(px0 + ddx * ds, 0.55, pz0 + ddz * ds, 0, 0.12, 0), () => dockKit(B, M, R));
   }
-  // tent: drop stakes / guy lines / fly hem onto the terrain (they floated up to 9cm on the downhill side)
-  if (ctx.tent && !ctx.tent.userData.settled) settleToGround(ctx.tent, heightAt);
-
-  const meshes = B.build(group, 'camp');
+  meshes.push(...B.build(group, 'dock'));
   scene.add(group);
   group.userData.tris = meshes.reduce((a, m) => a + m.geometry.attributes.position.count / 3, 0);
   return {
