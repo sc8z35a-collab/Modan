@@ -178,21 +178,63 @@ export function loft(path, rf, seg = 24, rad = 16, caps = true) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals(); return g;
 }
-// flat strap/ribbon along a path: width w (along `side` hint), thickness t
-export function ribbon(path, w = 0.03, t = 0.003, seg = 20, up = new THREE.Vector3(0, 1, 0)) {
+// flat strap/ribbon along a path: width w along `side` (projected orthogonal to the tangent), thickness t
+export function ribbon(path, w = 0.03, t = 0.003, seg = 20, side = new THREE.Vector3(1, 0, 0)) {
   const curve = new THREE.CatmullRomCurve3(path.map((p) => (p.isVector3 ? p : new THREE.Vector3(...p))));
   const pos = [], uv = [], idx = [], P = new THREE.Vector3(), Tn = new THREE.Vector3(), S = new THREE.Vector3(), N = new THREE.Vector3();
   const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1], [-1, -1]];
   for (let i = 0; i <= seg; i++) {
     const u = i / seg; curve.getPointAt(u, P); curve.getTangentAt(u, Tn);
-    S.crossVectors(Tn, up); if (S.lengthSq() < 1e-6) S.set(1, 0, 0); S.normalize(); N.crossVectors(S, Tn).normalize();
+    S.copy(side).addScaledVector(Tn, -side.dot(Tn)); if (S.lengthSq() < 1e-8) S.set(0, 1, 0); S.normalize(); N.crossVectors(Tn, S).normalize();
     for (const [a, b] of corners) { pos.push(P.x + S.x * a * w / 2 + N.x * b * t / 2, P.y + S.y * a * w / 2 + N.y * b * t / 2, P.z + S.z * a * w / 2 + N.z * b * t / 2); uv.push((a + 1) / 2, u * 4); }
   }
-  for (let i = 0; i < seg; i++) for (let j = 0; j < 4; j++) { const a = i * 5 + j, b = a + 5; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+  for (let i = 0; i < seg; i++) for (let j = 0; j < 4; j++) { const a = i * 5 + j, b = a + 5; idx.push(a, a + 1, b, a + 1, b + 1, b); }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals(); return g;
 }
+// vertical sweep with a superellipse cross-section: fn(t) -> { rx, rz, cx=0, cz=0, n=2 }. Caps top/bottom.
+export function sweepY(y0, y1, fn, seg = 16, rad = 24, caps = true) {
+  const pos = [], uv = [], idx = [];
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg, y = y0 + (y1 - y0) * t, f = fn(t); const n = f.n || 2;
+    for (let j = 0; j <= rad; j++) {
+      const a = (j / rad) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      const ex = Math.sign(c) * Math.pow(Math.abs(c), 2 / n), ez = Math.sign(s) * Math.pow(Math.abs(s), 2 / n);
+      pos.push((f.cx || 0) + ex * f.rx, y, (f.cz || 0) + ez * f.rz); uv.push(j / rad, t);
+    }
+  }
+  for (let i = 0; i < seg; i++) for (let j = 0; j < rad; j++) { const a = i * (rad + 1) + j, b = a + rad + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+  if (caps) for (const [i, top] of [[0, false], [seg, true]]) {
+    const f = fn(i / seg), c = pos.length / 3; pos.push(f.cx || 0, y0 + (y1 - y0) * (i / seg), f.cz || 0); uv.push(0.5, 0.5);
+    for (let j = 0; j < rad; j++) { const a = i * (rad + 1) + j; if (top) idx.push(c, a + 1, a); else idx.push(c, a, a + 1); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals(); return g;
+}
+// split firewood piece: pie-slice prism along +z (length len), angle `ang` of a log of radius r.
+// End caps get end-grain uvs (0..1 across the full log diameter). Use pieFace() to assign materials.
+export function pie(r, len, ang = Math.PI / 2, a0 = 0, seg = 6, seed = 0) {
+  const sh = new THREE.Shape(); const rnd = rng(seed * 31 + 7);
+  const inner = ang >= Math.PI * 1.99 ? null : 0.0;
+  if (inner === null) { sh.absarc(0, 0, r, 0, Math.PI * 2, false); }
+  else { sh.moveTo(Math.cos(a0 + ang / 2) * r * 0.06, Math.sin(a0 + ang / 2) * r * 0.06); for (let i = 0; i <= seg; i++) { const a = a0 + ang * (i / seg), rr = r * (0.97 + rnd() * 0.05); sh.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } sh.closePath(); }
+  const g = new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false, curveSegments: seg * 2 });
+  g.translate(0, 0, -len / 2);
+  const p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) {
+    if (Math.abs(n.getZ(i)) > 0.9) uv.setXY(i, p.getX(i) / (2 * r) + 0.5, p.getY(i) / (2 * r) + 0.5);
+    else uv.setXY(i, Math.atan2(p.getY(i), p.getX(i)) * r * 2, (p.getZ(i) / len + 0.5) * len * 1.5);
+  }
+  return g;
+}
+// material picker for pie(): end caps -> end, outer arc -> bark, split faces -> split
+export const pieFace = (end, bark, split, splitColor = 0xd9b98a) => (c, n) => {
+  if (Math.abs(n.z) > 0.9) return end;
+  const l = Math.hypot(c.x, c.y) || 1;
+  return (c.x * n.x + c.y * n.y) / l > 0.6 ? bark : { mat: split, color: splitColor };
+};
 // catenary-ish sagging line between two points
 export function sagPoints(a, b, sag, n = 16) {
   const A = a.isVector3 ? a : new THREE.Vector3(...a), Bv = b.isVector3 ? b : new THREE.Vector3(...b), out = [];
