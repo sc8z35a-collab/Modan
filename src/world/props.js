@@ -443,26 +443,20 @@ export function buildTripod() {
 }
 
 export function buildWoodPile(textures) {
-  // split firewood stacked between two stakes on two rails; pieces are pie slices with bark on the arc and
-  // end grain on the cut faces. Each log is its own mesh (interactions may remove logs one by one via
-  // userData.logs), sharing 3 materials.
-  const g = new THREE.Group(), M = kitMaterials(textures);
+  // split firewood stacked between two stakes on two base rails; pieces are pie slices with bark on the arc,
+  // end grain on the cut faces and pale split faces. All merged: 3-4 draw calls (was 15 meshes).
+  const g = new THREE.Group(), M = kitMaterials(textures), B = new Batch();
   const bark = new THREE.MeshStandardMaterial({ name: 'pileBark', vertexColors: true, map: textures.bark_brown_02.diff, normalMap: textures.bark_brown_02.nor, roughness: 1 });
-  const rnd = mulberry32(12), logs = [];
-  const add = (geo, mat, m, color, opt) => { const b = new Batch(); b.add(geo, mat, m, color, opt); const ms = b.build(g, 'pile'); return ms; };
-  // base rails + stakes
-  for (const z of [-0.16, 0.16]) add(cyl(0.035, 0.035, 1.05, 8).rotateZ(Math.PI / 2), bark, T(0, 0.035, z), 0x9a8a7a);
-  for (const x of [-0.5, 0.5]) add(cyl(0.022, 0.026, 0.75, 8), bark, T(x, 0.33, 0, 0, 0, x > 0 ? -0.06 : 0.06), 0x8a7a6a);
+  const rnd = mulberry32(12);
+  for (const z of [-0.16, 0.16]) B.add(cyl(0.035, 0.035, 1.05, 8).rotateZ(Math.PI / 2), bark, T(0, 0.035, z), 0x9a8a7a);
+  for (const x of [-0.5, 0.5]) B.add(cyl(0.022, 0.026, 0.75, 8), bark, T(x, 0.33, 0, 0, 0, x > 0 ? -0.06 : 0.06), 0x8a7a6a);
   for (let row = 0; row < 4; row++) for (let i = 0; i < 6 - row; i++) {
     const R = 0.08 + rnd() * 0.02, ang = Math.PI * (0.45 + rnd() * 0.5), a0 = rnd() * 6.28;
     const geo = pie(R, 0.46 + rnd() * 0.06, ang, a0, 5, row * 10 + i);
-    const b = new Batch();
     const m = T((i - (5 - row) / 2) * 0.16, 0.1 + row * 0.13, (rnd() - 0.5) * 0.04, 0, (rnd() - 0.5) * 0.12, rnd() * 6.28);
-    b.add(geo, bark, m, 0xa89888, { local: true, face: pieFace(M.endgrain, bark, M.wood, [0xd9b98a, 0xcfae80, 0xe0c498][i % 3]) });
-    const sub = new THREE.Group(); b.build(sub, 'log'); sub.children.forEach((c) => { c.castShadow = true; });
-    g.add(sub); logs.push(sub);
+    B.add(geo, bark, m, 0xa89888, { local: true, face: pieFace(M.endgrain, bark, M.wood, [0xd9b98a, 0xcfae80, 0xe0c498][i % 3]) });
   }
-  g.userData.logs = logs;
+  B.build(g, 'woodpile');
   return g;
 }
 
