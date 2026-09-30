@@ -3,7 +3,7 @@
 // attribution (author, license, source URL) that the field guide shows on every card.
 // usage: node tools/fetch-photos.mjs [--force]
 import { execFileSync } from 'node:child_process';
-import { existsSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
+import { existsSync, writeFileSync, mkdirSync, unlinkSync, readFileSync } from 'node:fs';
 
 const OUT = 'public/assets/photos';
 export const PHOTOS = {
@@ -20,7 +20,7 @@ export const PHOTOS = {
   pine: 'File:Pinus densiflora on Mount Kengyo.jpg',
   birch: 'File:Betula platyphylla 01.jpg',
   porcini: 'File:AD2009Sep13 Boletus edulis 01.jpg',
-  chanterelle: 'File:Cantharellus cibarius 2010 G1.jpg',
+  chanterelle: 'File:Kukeseen Lahemaal.jpg',
   bilberry: 'File:Vaccinium myrtillus - Bilberry 03.jpg',
   fern: 'File:Matteuccia struthiopteris kz06.jpg',
   waterlily: 'File:Nymphaea tetragona (91).jpg',
@@ -33,13 +33,17 @@ const strip = (h = '') => h.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 
 mkdirSync(OUT, { recursive: true });
 const force = process.argv.includes('--force');
+let prev = {}; try { prev = JSON.parse(readFileSync(`${OUT}/photos.json`, 'utf8')); } catch { /* first run */ }
 const meta = {};
 for (const [id, title] of Object.entries(PHOTOS)) {
+  // commons rate-limits hard (403 'You are making too many requests'): reuse cached metadata when the file exists
+  if (!force && prev[id]?.title === title.replace(/^File:/, '') && existsSync(`${OUT}/${id}.webp`)) { meta[id] = prev[id]; continue; }
+  await sleep(2500);
   const api = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=800&titles=' + encodeURIComponent(title);
   let info;
   for (let k = 0; k < 4 && !info; k++) {
     try { const d = JSON.parse(curl([api]).toString()); info = Object.values(d.query.pages)[0].imageinfo[0]; }
-    catch (e) { console.warn('retry', id, e.message.slice(0, 80)); await sleep(5000 * (k + 1)); }
+    catch (e) { console.warn('retry', id, e.message.slice(0, 80)); await sleep(15000 * (k + 1)); }
   }
   if (!info) { console.error('FAILED', id); continue; }
   const m = info.extmetadata;
