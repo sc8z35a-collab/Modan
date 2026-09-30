@@ -78,7 +78,8 @@ export class Batch {
     const base = _c2.set(color ?? 0xffffff);
     for (let i = 0; i < n; i++) {
       _va.fromBufferAttribute(pos, i);
-      if (!hasCol) { _c.copy(base); if (opt.shade) { _n.fromBufferAttribute(nor, i); opt.shade(_va, _n, _c); } col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b; }
+      // clamp: shade() noise could go negative (-0.008 on the ash) which blew up in the HDR/bloom chain
+      if (!hasCol) { _c.copy(base); if (opt.shade) { _n.fromBufferAttribute(nor, i); opt.shade(_va, _n, _c); } col[i * 3] = Math.max(0, _c.r); col[i * 3 + 1] = Math.max(0, _c.g); col[i * 3 + 2] = Math.max(0, _c.b); }
       if (opt.sway) sway[i] = opt.sway(_va);
     }
     if (!hasCol) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
