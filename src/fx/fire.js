@@ -33,12 +33,16 @@ void main(){
   float body = shape * (1.0 - uv.y) ;
   float f = body * 1.7 - (n*0.75 + n2*0.35) * (0.35 + uv.y*1.3);
   f = clamp(f * uIntensity, 0.0, 1.0);
-  vec3 c1 = vec3(1.0, 0.95, 0.75) * 7.0; // core
-  vec3 c2 = vec3(1.0, 0.45, 0.08) * 4.2;
-  vec3 c3 = vec3(0.6, 0.08, 0.01) * 1.4;
+  // core was x7 -> with 7 additive layers + night bloom the whole flame burned out to a white blob;
+  // keep the core hot but let the orange tongues and their noise structure survive tone mapping
+  vec3 c1 = vec3(1.0, 0.86, 0.55) * 2.6; // core
+  vec3 c2 = vec3(1.0, 0.42, 0.07) * 1.9;
+  vec3 c3 = vec3(0.6, 0.08, 0.01) * 0.9;
   vec3 col = mix(c3, c2, smoothstep(0.05, 0.4, f));
   col = mix(col, c1, smoothstep(0.55, 0.95, f));
   float alpha = smoothstep(0.02, 0.25, f);
+  // thin blue base where the gas burns cleanly just above the logs
+  col += vec3(0.05, 0.12, 0.5) * smoothstep(0.12, 0.0, uv.y) * smoothstep(0.7, 0.2, abs(uv.x)) * 1.5;
   gl_FragColor = vec4(col * alpha, alpha);
 }`;
 
