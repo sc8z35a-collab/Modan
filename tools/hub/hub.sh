@@ -24,7 +24,8 @@ ME="${AGENT_ID:-$(cat "$ROOT/.agent-id" 2>/dev/null || echo A)}"
 LOCK="$ROOT/tools/.git-lock"; touch "$LOCK"
 ts() { date -u +%Y%m%dT%H%M%SZ; }
 now() { date -u +%FT%TZ; }
-slug() { echo "$1" | tr -c 'A-Za-z0-9_-' '-' | cut -c1-40; }
+# ASCII slug; non-ASCII titles (Japanese) collapse to dashes -> append a short hash so names stay unique/readable
+slug() { local a; a="$(echo "$1" | tr -c 'A-Za-z0-9_-' '-' | tr -s '-' | sed 's/^-//;s/-$//' | cut -c1-32)"; echo "${a:+$a-}$(printf %s "$1" | md5sum | cut -c1-6)"; }
 
 locked() { if [ "${HUB_NOLOCK:-0}" = 1 ]; then "$@"; else ( flock -w 120 9 || exit 1; "$@" ) 9>"$LOCK"; fi; }
 
