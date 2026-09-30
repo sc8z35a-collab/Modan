@@ -245,7 +245,7 @@ export function buildFireRing(textures) {
   return g;
 }
 
-// firewood logs placed in the fire (visible count depends on fuel)
+// firewood logs placed in the fire (visible count follows the fuel: userData.setFuel)
 export function buildFireLogs(textures) {
   // teepee of 5 split logs + kindling. Bark logs and charred logs; charred ones carry the glow material so
   // main.js can drive userData.charred.emissiveIntensity. Glow is masked by an ember crack texture and fades
@@ -260,17 +260,30 @@ export function buildFireLogs(textures) {
   const charred = new THREE.MeshStandardMaterial({ name: 'charred', vertexColors: true, color: 0xffffff, map: kitTextures().grunge, roughness: 1, emissive: 0xff3300, emissiveMap: embers, emissiveIntensity: 0 });
   g.userData.charred = charred;
   const rnd = mulberry32(6);
-  for (let i = 0; i < 5; i++) {
+  // kindling first (always shown while there is fuel), then the logs one by one: marks[k] = vertex counts with
+  // k logs, so setFuel() can reveal logs with drawRange on the merged meshes (no extra draw calls)
+  for (let i = 0; i < 9; i++) { const a = rnd() * 6.28; B.add(cyl(0.008, 0.01, 0.35, 5), charred, T(Math.cos(a) * 0.06, 0.16, Math.sin(a) * 0.06, 0, -a, 0).multiply(T(0, 0, 0, 0, 0, 0.7 + rnd() * 0.3)), 0x1a1614); }
+  const marks = [B.mark()];
+  const order = [0, 3, 1, 4, 2]; // alternate sides so a half-fed fire still looks like a teepee
+  for (const i of order) {
     const a = (i / 5) * Math.PI * 2 + (rnd() - 0.5) * 0.3, len = 0.72 + rnd() * 0.12;
     const r = 0.055 + rnd() * 0.02, full = i % 2 === 1;
     const geo = full ? cyl(r * 0.92, r, len, 10, 4) : pie(r * 1.25, len, Math.PI * (0.55 + rnd() * 0.3), rnd() * 6, 5, i).rotateX(Math.PI / 2);
     const m = T(Math.cos(a) * 0.19, 0.27, Math.sin(a) * 0.19, 0, -a, 0).multiply(T(0, 0, 0, 0, 0, 0.95));
     if (full) B.add(geo, bark, m, 0xc8bcb0, { shade: (q, n, c) => { if (q.y < 0.3) c.multiplyScalar(0.25 + q.y * 2); } });
     else B.add(geo, charred, m, 0x2a2420, { local: true, shade: (q, n, c) => { const t = (q.y / len) + 0.5; c.multiplyScalar(t > 0.75 ? 1.8 : 1); } });
+    marks.push(B.mark());
   }
-  // kindling sticks in the middle
-  for (let i = 0; i < 9; i++) { const a = rnd() * 6.28; B.add(cyl(0.008, 0.01, 0.35, 5), charred, T(Math.cos(a) * 0.06, 0.16, Math.sin(a) * 0.06, 0, -a, 0).multiply(T(0, 0, 0, 0, 0, 0.7 + rnd() * 0.3)), 0x1a1614); }
-  B.build(g, 'firelogs');
+  const meshes = B.build(g, 'firelogs');
+  // setFuel(f): fuel 0..1.2 -> 1..5 logs (a full load = 5 logs = 1.0). Called by main.js every frame (cheap: only
+  // touches drawRange when the count changes).
+  let shown = -1;
+  g.userData.setFuel = (f) => {
+    const k = Math.max(0, Math.min(5, Math.ceil(f / 0.2 - 1e-6)));
+    if (k === shown) return; shown = k;
+    for (const ms of meshes) ms.geometry.setDrawRange(0, marks[k].get(ms.material) ?? 0);
+  };
+  g.userData.setFuel(1.2);
   return g;
 }
 

@@ -485,6 +485,7 @@ class Game {
     this.fire.update(dt, this.world.U.uWind.value, this.rain);
     this.fireLogs.userData.charred && (this.fireLogs.userData.charred.emissiveIntensity = this.fire.intensity * 2.5);
     if (this.fire.fuel <= 0.01 && !this.fire.lit) this.fireLogs.visible = false;
+    this.fireLogs.userData.setFuel?.(this.fire.fuel); // [lane B] logs burn down with the fuel (all 5 always showed)
     this.fireflies.update(dt, night * (1 - this.rain) * smoothstep(0.3, 0.9, night));
     this.particles.update(dt, this.camera, this.rain);
     this.water.update(dt, this.sky, this.fire);

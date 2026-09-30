@@ -127,6 +127,8 @@ export class Batch {
     if (!this.groups.has(mat)) this.groups.set(mat, []);
     this.groups.get(mat).push(g); this.tris += g.attributes.position.count / 3;
   }
+  // snapshot of vertex counts per material (for drawRange-based progressive reveal of merged parts)
+  mark() { const m = new Map(); for (const [mat, list] of this.groups) m.set(mat, list.reduce((a, g) => a + g.attributes.position.count, 0)); return m; }
   // merge -> meshes added to parent. opts per material via mat.userData: {noShadow, renderOrder}
   build(parent, name = 'batch') {
     const out = [];
