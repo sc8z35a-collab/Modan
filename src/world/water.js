@@ -73,7 +73,7 @@ export class Water {
       uniforms: this.uniforms,
       transparent: true,
       vertexShader: /* glsl */`
-        uniform mat4 uTexMatrix; varying vec4 vRUV; varying vec3 vW; varying float vFog;
+        uniform mat4 uTexMatrix; varying vec4 vRUV; varying vec3 vW; varying float vFog; varying float vLensMag;
         void main(){
           vec4 w = modelMatrix * vec4(position,1.0);
           vW = w.xyz;
@@ -81,6 +81,7 @@ export class Water {
           vec4 mv = viewMatrix * w;
           vFog = -mv.z;
           gl_Position = projectionMatrix * mv;
+          vLensMag = max(projectionMatrix[1][1] / 1.6, 1.0); // projectionMatrix only exists in the vertex stage
         }`,
       fragmentShader: /* glsl */`
         precision highp float;
@@ -88,7 +89,7 @@ export class Water {
         uniform float uTime; uniform sampler2D tReflect, tNormal;
         uniform vec3 uSunDir, uSunCol, uShallow, uDeep, uFogCol, uFirePos; uniform vec3 uFireCol;
         uniform float uFogDensity, uNight, uRain; uniform vec4 uRipples[8]; uniform vec2 uWindDir;
-        varying vec4 vRUV; varying vec3 vW; varying float vFog;
+        varying vec4 vRUV; varying vec3 vW; varying float vFog; varying float vLensMag;
         float h21(vec2 q){ return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
         // raindrop rings: one drop per cell per cycle, random position/phase; returns the ring slope (xz)
         vec2 rainRings(vec2 q, float t){
@@ -131,8 +132,7 @@ export class Water {
           float fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
           // reflection distortion is a screen-space offset: at 20x a 0.045 offset spans 20x more of the scene and
           // shreds the reflection into streaks -> scale it with the lens magnification (projectionMatrix[1][1])
-          float lensMag = max(projectionMatrix[1][1] / 1.6, 1.0);
-          vec2 ruv = vRUV.xy / vRUV.w + n.xz * 0.045 / lensMag;
+          vec2 ruv = vRUV.xy / vRUV.w + n.xz * 0.045 / vLensMag;
           vec3 refl = texture2D(tReflect, ruv).rgb;
           // absorption
           // gentler absorption in the first metre: the lake bed drops ~0.7m within 1m of the shore, so a linear
