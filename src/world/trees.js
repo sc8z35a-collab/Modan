@@ -83,13 +83,18 @@ export function windify(mat, U, strength = 1, isLeaf = false) {
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         {
           vec3 ip = vec3(0.0);
+          // wind is a WORLD direction: bring it into object space, otherwise every instance (random yaw)
+          // swayed in its own direction and neighbouring trees waved against each other
+          vec3 wObj = vec3(uWind.x, 0.0, uWind.y);
           #ifdef USE_INSTANCING
             ip = instanceMatrix[3].xyz;
+            mat3 im3 = mat3(instanceMatrix);
+            wObj = transpose(im3) * wObj / max(dot(im3[0], im3[0]), 1e-4);
           #endif
           float hh = max(position.y, 0.0);
           float ph = ip.x*0.13 + ip.z*0.17;
           float sway = (sin(uTime*0.9 + ph) * 0.6 + sin(uTime*1.7 + ph*1.3)*0.25 + 0.4) * ${(0.004 * strength).toFixed(4)} * hh * hh;
-          transformed.xz += uWind * sway;
+          transformed.xz += wObj.xz * sway;
           ${isLeaf ? `
           float fl = sin(uTime*6.0 + position.x*3.0 + position.z*2.0 + ph) * 0.03 * hh * 0.1;
           transformed += normal * fl;` : ''}
@@ -113,7 +118,7 @@ export function windify(mat, U, strength = 1, isLeaf = false) {
         #endif`);
     }
   };
-  mat.customProgramCacheKey = () => 'wind' + strength + isLeaf;
+  mat.customProgramCacheKey = () => 'wind2' + strength + isLeaf;
   return mat;
 }
 
