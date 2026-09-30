@@ -383,7 +383,7 @@ export function createTreeKinds(textures, U, quality = 1) {
   const leafTex = paintLeafCard(512);
   const mkFol = (map, col) => windify(new THREE.MeshStandardMaterial({
     map, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.78, color: col,
-    alphaToCoverage: true, vertexColors: true,
+    vertexColors: true, // no alphaToCoverage: the composer target has no MSAA -> A2C degraded to dotted, dithered foliage
   }), U, 1, true);
   const spruceMat = mkFol(spruceTex, 0xd8e8d0);
   const pineMat = mkFol(pineTex, 0xe6f0d0);

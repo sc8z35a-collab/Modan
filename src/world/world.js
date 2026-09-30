@@ -189,7 +189,8 @@ export class World {
     for (const pt of parts) {
       pt.castShadow = opts.castShadow ?? true;
       if (opts.wind) pt.mat = windify(pt.mat.clone(), this.U, opts.wind, true);
-      if (opts.alpha) { pt.mat.alphaTest = 0.5; pt.mat.alphaToCoverage = true; pt.mat.side = THREE.DoubleSide; }
+      // no alphaToCoverage: the composer target has no MSAA, A2C degraded to dithered dotted foliage
+      if (opts.alpha) { pt.mat.alphaTest = 0.5; pt.mat.alphaToCoverage = false; pt.mat.side = THREE.DoubleSide; }
       pt.mat.envMapIntensity = 0.7;
     }
     const lods = [{ dist: lodDists[0], parts }];

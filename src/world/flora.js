@@ -351,7 +351,7 @@ export class Flora {
     const gq = Math.max(0.3, q.grass ?? 1);
 
     // materials
-    const cardMat = windify(new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75, alphaToCoverage: true }), U, 60, true);
+    const cardMat = windify(new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75 }), U, 60, true);
     const decalMat = new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.35, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     const coneMat = new THREE.MeshStandardMaterial({ color: 0x7a4e2c, roughness: 0.85 });
     const twigMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 1 });
