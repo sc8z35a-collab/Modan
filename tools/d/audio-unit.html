@@ -1,0 +1,41 @@
+<!doctype html><meta charset="utf-8"><body><script type="module">
+// Runs the real AudioEngine for ~60 simulated seconds across day/night/rain/fire and reports exceptions,
+// non-finite params and node growth (every created node is counted via a patched context).
+import { AudioEngine } from '/src/audio/audio.js';
+const out = []; const ok = (c, m) => out.push((c ? 'PASS ' : 'FAIL ') + m);
+const a = new AudioEngine();
+let created = 0; const P = AudioContext.prototype;
+for (const k of ['createGain', 'createOscillator', 'createBufferSource', 'createBiquadFilter', 'createStereoPanner']) { const f = P[k]; P[k] = function (...x) { created++; return f.apply(this, x); }; }
+a.init();
+await a.ctx.resume().catch(() => {});
+out.push('state ' + a.ctx.state);
+const calls = [];
+a.onCall = (k) => calls.push(k);
+let err = null;
+const sc = [
+  { night: 0, rain: 0, fireLevel: 0, fireDist: 30, waterDist: 3, hours: 7, dusk: 0 },
+  { night: 1, rain: 0, fireLevel: 1, fireDist: 2, waterDist: 20, hours: 23, dusk: 0 },
+  { night: 0.3, rain: 1, fireLevel: 0.5, fireDist: 0, waterDist: 0, hours: 14, dusk: 0 },
+  { night: 1, rain: 0, fireLevel: 0, fireDist: NaN, waterDist: NaN, hours: undefined, dusk: undefined },
+];
+const base = created;
+for (let i = 0; i < 4 * 900; i++) {
+  const s = Object.assign({}, sc[(i / 900) | 0]);
+  s.firePan = Math.sin(i * 0.01) * 2;
+  try { a.update(1 / 15, s); } catch (e) { err = e; break; }
+}
+ok(!err, 'no exception in update' + (err ? ': ' + err.message : ''));
+out.push('nodes created over 240s sim: ' + (created - base) + ', calls: ' + [...new Set(calls)].join(','));
+try { a.woodpecker(); a.uguisu(); a.frog(); a.creak(); a.thunder(); a.owl(); a.loon(); ok(true, 'voices run'); } catch (e) { ok(false, 'voice threw ' + e.message); }
+try { a.whistle(1000, 0, 0.2, 0, 0); a.whistle(NaN, 100, 0.2, 0.1, 0); ok(true, 'whistle tolerates bad args'); } catch (e) { ok(false, 'whistle bad args threw: ' + e.message); }
+window.__res = out;
+</script>
+<script type="module">
+import { AudioEngine } from '/src/audio/audio.js';
+await new Promise((r) => setTimeout(r, 200));
+const b = new AudioEngine(); b.init(); await b.ctx.resume().catch(() => {});
+const o = [];
+try { b.burst(NaN, 1, 0.2, 0.1); b.burst(1000, 1, NaN, 0.1); b.tone(NaN, 0.1); b.tone(400, 0.1, 0.1, 'sine', NaN); b.footstep(undefined, false); b.footstep('wood', true); o.push('PASS burst/tone tolerate NaN'); }
+catch (e) { o.push('FAIL burst/tone NaN: ' + e.message); }
+window.__res2 = o;
+</script>

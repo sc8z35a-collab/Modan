@@ -134,6 +134,8 @@ export class AudioEngine {
     if (!this.enabled) return;
     const ctx = this.ctx, t = ctx.currentTime;
     if (ctx.state !== 'running') return; // don't pile up nodes while suspended (tab hidden)
+    // a single NaN (e.g. a volume scaled by a NaN distance) made the AudioParam setter throw mid-frame
+    if (![freq, q, dur, pan, rev].every(Number.isFinite) || dur <= 0) return;
     const s = ctx.createBufferSource(); s.buffer = buf || this.noiseBuf;
     const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
     const g = ctx.createGain(); const p = ctx.createStereoPanner(); p.pan.value = pan;
@@ -148,6 +150,7 @@ export class AudioEngine {
     if (!this.enabled) return;
     const ctx = this.ctx, t = ctx.currentTime;
     if (ctx.state !== 'running') return;
+    if (![freq, dur, slide, pan, rev].every(Number.isFinite) || freq <= 0 || dur <= 0) return;
     const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t);
     if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
     const g = ctx.createGain(); const p = ctx.createStereoPanner(); p.pan.value = pan;
@@ -195,6 +198,7 @@ export class AudioEngine {
   // tremolo'd sine with an FM wobble: much closer to a real bird whistle than a plain tone
   whistle(f0, f1, dur, peak, pan, delay = 0, vib = 0) {
     if (!this.enabled || this.ctx.state !== 'running') return;
+    if (![f0, f1, dur, peak, pan, delay, vib].every(Number.isFinite) || f0 <= 0 || dur <= 0) return;
     const ctx = this.ctx, t = ctx.currentTime + delay;
     const o = ctx.createOscillator(); o.type = 'sine';
     o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
@@ -268,6 +272,12 @@ export class AudioEngine {
   update(dt, s) {
     if (!this.enabled || this.ctx.state !== 'running') return;
     if (this.extra) s = Object.assign(s, this.extra); // (s is a fresh literal from main.js each frame) hours / dusk / firePan from src/fx/laned.js
+    // AudioParam.setTargetAtTime() THROWS on NaN/Infinity, and update() runs inside the frame loop: one bad
+    // distance (NaN player position, missing fire) used to kill the whole game loop. Sanitize every input.
+    const fin = (v, d) => (Number.isFinite(v) ? v : d);
+    s.night = fin(s.night, 0); s.rain = fin(s.rain, 0); s.fireLevel = fin(s.fireLevel, 0);
+    s.fireDist = fin(s.fireDist, 100); s.waterDist = fin(s.waterDist, 100); s.dusk = fin(s.dusk, 0);
+    if (!Number.isFinite(dt) || dt < 0) dt = 0;
     const t = this.ctx.currentTime, k = 0.25;
     const windAmt = 0.05 + 0.04 * Math.sin(t * 0.13) + 0.03 * Math.sin(t * 0.41);
     this.wind.g.gain.setTargetAtTime(windAmt * (1 + s.rain), t, k);
