@@ -8,6 +8,7 @@ import { Grass } from './world/grass.js';
 import { WORLD, heightAt, lakeDist } from './world/heightfield.js';
 import { PATH_PTS } from './world/terrain.js';
 import * as P from './world/props.js';
+import { buildCampDetails } from './world/campdetail.js';
 import { Campfire, Fireflies } from './fx/fire.js';
 import { Particles } from './fx/particles.js';
 import { AudioEngine } from './audio/audio.js';
@@ -174,7 +175,7 @@ class Game {
     // tent
     const tx0 = C.x - 6.5, tz0 = C.z + 3.5;
     this.tent = put(P.buildTent(U), tx0, tz0, 0.9, 0.02);
-    P.settleToGround(this.tent, heightAt); // Lane B: pegs / guy lines followed flat ground (up to 9cm floating)
+    P.settleToGround(this.tent, heightAt); // [lane B] stakes / guy lines / hem followed a flat plane (floated up to 9cm)
     this.tentPos = new THREE.Vector3(tx0 + Math.sin(0.9) * 1.8, 0, tz0 + Math.cos(0.9) * 1.8);
     this.world.colliders.add(tx0, tz0, 1.55, 'tent');
     // seats
@@ -228,10 +229,11 @@ class Game {
       contains: (x, z) => { v.set(x, 0.55, z).applyMatrix4(inv); return Math.abs(v.x) < 1.0 && v.z < 0.3 && v.z > -dockLen; },
     }];
     // rowboat moored at dock
-    this.boat = P.buildRowboat(tx); this.boatCap = this.boat.userData.cap; // Lane B: clinker-built rowboat this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, 0, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
+    this.boat = P.buildRowboat(tx); this.boatCap = this.boat.userData.cap; // [lane B] clinker rowboat, exact waterline cap
+    this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, 0, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
     // hull is 0.45m deep with its rim at local y=0: at +0.02 the rim sat 4cm above the lake (boat looked sunk)
     this.boatBaseY = WORLD.waterLevel + 0.26;
-    // Lane B: ~40 small camp props (chopping block, cooler, stove, sleeping bag, washing line, tackle...)
+    // [lane B] camp detail props (merged per material, ~15 draw calls)
     this.campDetails = buildCampDetails({ scene: this.scene, textures: tx, U, heightAt, colliders: this.world.colliders, camp: C,
       firePos: new THREE.Vector3(fx, heightAt(fx, fz), fz), tent: this.tent, tentOrigin: { x: tx0, z: tz0 }, tentRot: 0.9, poleA, dock: this.dock,
       dockEnd: this.dockEnd, boat: this.boat, table });
@@ -580,6 +582,7 @@ class Game {
     this.fire.update(dt, this.world.U.uWind.value, this.rain);
     this.fireLogs.userData.charred && (this.fireLogs.userData.charred.emissiveIntensity = this.fire.intensity * 2.5);
     if (this.fire.fuel <= 0.01 && !this.fire.lit) this.fireLogs.visible = false;
+    this.fireLogs.userData.setFuel?.(this.fire.fuel); // [lane B] logs burn down with the fuel (all 5 always showed)
     this.fireflies.update(dt, night * (1 - this.rain) * smoothstep(0.3, 0.9, night));
     this.particles.update(dt, this.camera, this.rain);
     this.laneD?.update(dt);
