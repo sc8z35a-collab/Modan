@@ -171,7 +171,7 @@ export class Campfire {
 
     // glow halo: light scattered by the smoke/air around the flames (soft additive sprite, picked up by bloom)
     this.halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.sparkMesh.material.uniforms.uTex.value, color: 0xff7a2a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
-    this.halo.position.y = 0.75; this.halo.scale.set(3.2, 3.2, 1); this.halo.renderOrder = 18;
+    this.halo.position.y = 0.9; this.halo.scale.set(4.2, 3.6, 1); this.halo.renderOrder = 18;
     this.group.add(this.halo);
   }
 
@@ -217,7 +217,7 @@ export class Campfire {
     this.emberU.uTime.value = this.time;
     this.emberU.uWind.value = Math.sin(this.time * 0.5) * Math.hypot(wind.x, wind.y); // gusts fan the coals
     this.embers.visible = emb > 0.003;
-    this.halo.material.opacity = I * 0.16 * flick;
+    this.halo.material.opacity = I * 0.05 * flick; // subtle: the flame + bloom already saturate the core
     this.halo.visible = I > 0.02;
 
     // sparks

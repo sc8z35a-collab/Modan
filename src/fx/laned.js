@@ -37,6 +37,7 @@ export function installLaneD(game) {
   const env = { night: 0, sunDir: new THREE.Vector3(0, 1, 0), wind: null };
   const extra = { hours: 12, dusk: 0, firePan: 0 };
   if (g.particles) g.particles.env = env;
+  if (g.water && g.particles) g.water.extraHide = [g.particles.splash, g.particles.dust, g.particles.leaves].filter(Boolean);
   if (g.audio) g.audio.extra = extra;
 
   return {

@@ -250,6 +250,7 @@ export class Water {
       .multiply(pm).multiply(m.matrixWorldInverse);
 
     this.mesh.visible = false;
+    if (this.extraHide?.length) hide = hide.concat(this.extraHide); // screen-space particles (splashes, dust) must not be mirrored
     const vis = hide.map((o) => { const v = o.visible; o.visible = false; return v; });
     const shadowAuto = r.shadowMap.autoUpdate; r.shadowMap.autoUpdate = false;
     const prevTM = r.toneMapping; r.toneMapping = THREE.NoToneMapping;

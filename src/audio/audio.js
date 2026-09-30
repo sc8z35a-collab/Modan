@@ -277,7 +277,7 @@ export class AudioEngine {
     this.water.g.gain.setTargetAtTime(wv * wv * (0.09 + 0.05 * Math.sin(t * 0.9)), t, k);
     const fv = s.fireLevel * Math.max(0, 1 - s.fireDist / 22);
     this.fireBed.g.gain.setTargetAtTime(fv * 0.22, t, k);
-    this.crickets.g.gain.setTargetAtTime(s.night * 0.012, t, 1);
+    this.crickets.g.gain.setTargetAtTime(s.night * 0.012 * (1 - s.rain * 0.85), t, 1); // crickets go quiet in the rain
     this.rainBed.g.gain.setTargetAtTime(s.rain * 0.18, t, 1);
     // fire crackles
     this.crackT -= dt;
