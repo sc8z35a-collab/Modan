@@ -188,7 +188,7 @@ function backpack(B, M, R, gh) {
   B.add(torus(0.02, 0.005, 5, 12, Math.PI), M.fabric, T(0, H + 0.04, -0.1, 0, 0, 0), dark);
   B.add(torus(0.022, 0.004, 6, 14), M.metal, T(-0.09, 0.47, 0.18, 0, Math.PI / 2, 0, 1, 1.5, 1), 0xd8a030);
   const mug = vessel([[0.001, 0], [0.04, 0], [0.042, 0.004], [0.043, 0.07], [0.044, 0.075]], 0.002, 24);
-  B.add(mug, M.enamel, T(-0.09, 0.36, 0.23, 0.25, 0, 0.15), 0xeeeae0, { shade: (p, n, c) => { if (p.y > 0.066) c.setRGB(0.05, 0.12, 0.3); } });
+  B.add(mug, M.enamel, T(-0.09, 0.36, 0.23, 0.25, 0, 0.15), 0xeeeae0, { local: true, shade: (p, n, c) => { if (p.y > 0.066) c.setRGB(0.05, 0.12, 0.3); } });
   B.add(torus(0.022, 0.0045, 6, 12, Math.PI), M.enamel, T(-0.09, 0.4, 0.21, 0.25, Math.PI / 2, Math.PI / 2 + 0.15), 0xeeeae0);
   // foam sleeping mat strapped under the bag
   B.add(cyl(0.075, 0.075, 0.5, 20, 1).rotateZ(Math.PI / 2), M.plastic, T(0, 0.075, 0.03), 0x7a8f3c, { shade: (p, n, c) => { if (Math.abs(p.x) > 0.245) c.multiplyScalar(0.8); } });
@@ -250,7 +250,7 @@ function fireKit(B, M, R, gh) {
     const st = jitter(new THREE.IcosahedronGeometry(0.22, 3), 0.05, 5, 11); st.scale(1, 0.25, 0.85);
     B.add(st, M.iron, T(0, 0.02, 0), 0x6d6a66, { shade: (p, n, c) => { c.multiplyScalar(0.8 + 0.25 * n.y); } });
     const sk = vessel([[0.001, 0], [0.12, 0], [0.13, 0.008], [0.135, 0.04], [0.14, 0.045]], 0.005, 32);
-    B.add(sk, M.iron, T(0, 0.075, 0), 0x1e1d1c, { shade: (p, n, c) => { if (n.y > 0.8 && p.y < 0.02) c.multiplyScalar(1.3); } });
+    B.add(sk, M.iron, T(0, 0.075, 0), 0x1e1d1c, { local: true, shade: (p, n, c) => { if (n.y > 0.8 && p.y < 0.02) c.multiplyScalar(1.3); } });
     B.add(rbox(0.16, 0.012, 0.03, 0.005), M.iron, T(0.21, 0.105, 0, 0, 0, 0.12), 0x1e1d1c);
     B.add(torus(0.008, 0.0035, 5, 10), M.iron, T(0.285, 0.114, 0, Math.PI / 2, 0, 0.12), 0x1e1d1c);
     B.add(box(0.035, 0.01, 0.022), M.iron, T(-0.137, 0.11, 0), 0x1e1d1c); // helper handle

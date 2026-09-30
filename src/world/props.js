@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { heightAt } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
-import { Batch, T, kitMaterials, rbox, box, cyl, tube, loft, sphere, torus } from './propkit.js';
+import { Batch, T, kitMaterials, kitTextures, rbox, box, cyl, tube, loft, sphere, torus, lathe, ribbon, pie, pieFace, jitter } from './propkit.js';
 
 // deterministic 0..1 hash of a position (identical for coincident vertices of non-indexed geometry)
 export function posHash(x, y, z, seed = 0) {
@@ -202,61 +202,101 @@ export function buildTent(U) {
 }
 
 export function buildFireRing(textures) {
-  const g = new THREE.Group();
+  // 11 river stones (flattened, soot-blackened on the inner/upper faces), bedded into the ground, a bed of ash
+  // with charcoal chunks and half-burnt ends, scorched earth ring around.
+  const g = new THREE.Group(), M = kitMaterials(textures), B = new Batch();
   const rnd = mulberry32(3);
-  const stoneMat = new THREE.MeshStandardMaterial({ map: textures.rocky_terrain_02.diff, normalMap: textures.rocky_terrain_02.nor, roughness: 0.9, color: 0x9a948c });
-  const soot = new THREE.MeshStandardMaterial({ color: 0x151210, roughness: 1 });
+  const stoneMat = new THREE.MeshStandardMaterial({ name: 'ringStone', vertexColors: true, map: textures.rocky_terrain_02.diff, normalMap: textures.rocky_terrain_02.nor, roughness: 0.9 });
+  const ashMat = new THREE.MeshStandardMaterial({ name: 'ash', vertexColors: true, map: kitTextures().grunge, roughness: 1 });
+  const tints = [0x9a948c, 0x8c8a86, 0xa39a8e, 0x7f7b76, 0x958b80];
   for (let i = 0; i < 11; i++) {
-    const a = (i / 11) * Math.PI * 2;
-    const geo = new THREE.IcosahedronGeometry(0.2 + rnd() * 0.07, 2);
-    const p = geo.attributes.position;
-    const seed = i * 7.13;
+    const a = (i / 11) * Math.PI * 2 + (rnd() - 0.5) * 0.12;
+    const geo = new THREE.IcosahedronGeometry(0.2 + rnd() * 0.07, 3);
+    const p = geo.attributes.position; const seed = i * 7.13;
     for (let j = 0; j < p.count; j++) {
       const x = p.getX(j), y = p.getY(j), z = p.getZ(j);
-      const k = 0.8 + posHash(+x.toFixed(4), +y.toFixed(4), +z.toFixed(4), seed) * 0.35;
-      p.setXYZ(j, x * k, y * k * 0.7, z * k);
+      const k = 0.82 + posHash(+x.toFixed(4), +y.toFixed(4), +z.toFixed(4), seed) * 0.28 + 0.06 * Math.sin(x * 9 + seed) * Math.cos(z * 7);
+      p.setXYZ(j, x * k * 1.1, y * k * 0.62, z * k * 0.9);
     }
     geo.computeVertexNormals();
-    const m = new THREE.Mesh(geo, stoneMat);
-    m.position.set(Math.cos(a) * 0.72, 0.08, Math.sin(a) * 0.72);
-    m.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
-    m.castShadow = m.receiveShadow = true;
-    g.add(m);
+    const rx = Math.cos(a) * 0.72, rz = Math.sin(a) * 0.72, ry = -a + (rnd() - 0.5) * 0.6;
+    // soot: inner side (toward the fire) and upper faces darkened, bottom damp/earthy
+    B.add(geo, stoneMat, T(rx, 0.06 + rnd() * 0.03, rz, (rnd() - 0.5) * 0.3, ry, (rnd() - 0.5) * 0.3), tints[i % 5], { shade: (q, n, c) => {
+      const inward = -(q.x * Math.cos(a) + q.z * Math.sin(a)) / 0.72 + 1; // >0 toward the centre
+      const s = Math.min(1, Math.max(0, (0.72 - Math.hypot(q.x, q.z)) * 5 + 0.3) * (0.4 + 0.6 * Math.max(0, n.y + 0.3)));
+      c.multiplyScalar(1 - 0.82 * s); if (q.y < 0.03) c.multiplyScalar(0.7); void inward;
+    } });
   }
-  const ash = new THREE.Mesh(new THREE.CircleGeometry(0.62, 24), soot);
-  ash.rotation.x = -Math.PI / 2; ash.position.y = 0.02; ash.receiveShadow = true; g.add(ash);
+  // ash bed: domed disc, light grey centre -> black charcoal edge, conformed later by settle (flat ring area)
+  const ash = new THREE.CircleGeometry(0.62, 40, 0, Math.PI * 2); ash.rotateX(-Math.PI / 2);
+  { const p = ash.attributes.position; for (let i = 0; i < p.count; i++) { const r = Math.hypot(p.getX(i), p.getZ(i)); p.setY(i, 0.02 + 0.035 * (1 - (r / 0.62) ** 2) + (posHash(p.getX(i), 0, p.getZ(i), 4) - 0.5) * 0.01); } ash.computeVertexNormals(); }
+  B.add(ash, ashMat, null, 0xffffff, { shade: (q, n, c) => { const r = Math.hypot(q.x, q.z) / 0.62; const v = 0.55 - 0.45 * r + (posHash(q.x * 3, 1, q.z * 3, 2) - 0.5) * 0.2; c.setRGB(v, v * 0.97, v * 0.94); } });
+  // charcoal chunks + white-ashed ember ends + scorched ground ring
+  for (let i = 0; i < 38; i++) {
+    const a = rnd() * 6.283, d = Math.sqrt(rnd()) * 0.5, x = Math.cos(a) * d, z = Math.sin(a) * d;
+    const geo = new THREE.BoxGeometry(0.03 + rnd() * 0.05, 0.02 + rnd() * 0.02, 0.025 + rnd() * 0.04, 2, 1, 2); jitter(geo, 0.012, 40, i);
+    const white = rnd() < 0.3;
+    B.add(geo, ashMat, T(x, 0.035 + 0.03 * (1 - (d / 0.62) ** 2), z, rnd(), rnd() * 6, rnd()), white ? 0x8a8680 : 0x141210);
+  }
+  const scorch = new THREE.RingGeometry(0.55, 1.15, 40, 3); scorch.rotateX(-Math.PI / 2); scorch.translate(0, 0.012, 0);
+  B.add(scorch, M.ao, null, 0x666666, { shade: (q, n, c) => { const r = Math.hypot(q.x, q.z); c.multiplyScalar(r < 0.85 ? 1 : Math.max(0, 1 - (r - 0.85) / 0.3)); } });
+  B.build(g, 'firering');
   return g;
 }
 
 // firewood logs placed in the fire (visible count depends on fuel)
 export function buildFireLogs(textures) {
-  const g = new THREE.Group();
-  const bark = new THREE.MeshStandardMaterial({ map: textures.bark_brown_02.diff, normalMap: textures.bark_brown_02.nor, roughness: 0.95 });
-  const charred = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 1, emissive: 0xff3300, emissiveIntensity: 0 });
+  // teepee of 5 split logs + kindling. Bark logs and charred logs; charred ones carry the glow material so
+  // main.js can drive userData.charred.emissiveIntensity. Glow is masked by an ember crack texture and fades
+  // toward the unburnt upper ends (vertex colour).
+  const g = new THREE.Group(), M = kitMaterials(textures), B = new Batch();
+  const bark = new THREE.MeshStandardMaterial({ name: 'fireBark', vertexColors: true, map: textures.bark_brown_02.diff, normalMap: textures.bark_brown_02.nor, roughness: 0.95 });
+  const embers = canvasTex(256, 256, (c, w, h) => {
+    c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+    const R = mulberry32(5);
+    for (let i = 0; i < 70; i++) { c.strokeStyle = `rgba(255,${120 + R() * 100 | 0},40,${0.5 + R() * 0.5})`; c.lineWidth = 0.8 + R() * 2.5; c.beginPath(); let x = R() * w, y = R() * h; c.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (R() - 0.5) * 40; y += (R() - 0.5) * 16; c.lineTo(x, y); } c.stroke(); }
+  });
+  const charred = new THREE.MeshStandardMaterial({ name: 'charred', vertexColors: true, color: 0xffffff, map: kitTextures().grunge, roughness: 1, emissive: 0xff3300, emissiveMap: embers, emissiveIntensity: 0 });
   g.userData.charred = charred;
+  const rnd = mulberry32(6);
   for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2;
-    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.8, 10), i % 2 ? bark : charred);
-    log.position.set(Math.cos(a) * 0.18, 0.28, Math.sin(a) * 0.18);
-    log.rotation.set(0, -a, 0); log.rotateZ(0.95);
-    log.castShadow = true;
-    g.add(log);
+    const a = (i / 5) * Math.PI * 2 + (rnd() - 0.5) * 0.3, len = 0.72 + rnd() * 0.12;
+    const r = 0.055 + rnd() * 0.02, full = i % 2 === 1;
+    const geo = full ? cyl(r * 0.92, r, len, 10, 4) : pie(r * 1.25, len, Math.PI * (0.55 + rnd() * 0.3), rnd() * 6, 5, i).rotateX(Math.PI / 2);
+    const m = T(Math.cos(a) * 0.19, 0.27, Math.sin(a) * 0.19, 0, -a, 0).multiply(T(0, 0, 0, 0, 0, 0.95));
+    if (full) B.add(geo, bark, m, 0xc8bcb0, { shade: (q, n, c) => { if (q.y < 0.3) c.multiplyScalar(0.25 + q.y * 2); } });
+    else B.add(geo, charred, m, 0x2a2420, { local: true, shade: (q, n, c) => { const t = (q.y / len) + 0.5; c.multiplyScalar(t > 0.75 ? 1.8 : 1); } });
   }
+  // kindling sticks in the middle
+  for (let i = 0; i < 9; i++) { const a = rnd() * 6.28; B.add(cyl(0.008, 0.01, 0.35, 5), charred, T(Math.cos(a) * 0.06, 0.16, Math.sin(a) * 0.06, 0, -a, 0).multiply(T(0, 0, 0, 0, 0, 0.7 + rnd() * 0.3)), 0x1a1614); }
+  B.build(g, 'firelogs');
   return g;
 }
 
 export function buildLogSeat(textures, len = 2.2) {
-  const bark = new THREE.MeshStandardMaterial({ map: textures.bark_brown_02.diff, normalMap: textures.bark_brown_02.nor, roughnessMap: textures.bark_brown_02.arm, roughness: 1 });
-  const endTex = canvasTex(256, 256, (g, w) => {
-    g.fillStyle = '#b08a5a'; g.fillRect(0, 0, w, w);
-    for (let r = 120; r > 4; r -= 5 + Math.random() * 4) { g.strokeStyle = `rgba(90,60,30,${0.3 + Math.random() * 0.3})`; g.lineWidth = 1.5; g.beginPath(); g.arc(128, 128, r, 0, 7); g.stroke(); }
-    g.strokeStyle = '#3b2a18'; g.lineWidth = 10; g.beginPath(); g.arc(128, 128, 124, 0, 7); g.stroke();
-  });
-  const endMat = new THREE.MeshStandardMaterial({ map: endTex, roughness: 0.9 });
-  const geo = new THREE.CylinderGeometry(0.22, 0.24, len, 20, 1);
-  const m = new THREE.Mesh(geo, [bark, endMat, endMat]);
-  m.rotation.z = Math.PI / 2; m.position.y = 0.2; m.castShadow = m.receiveShadow = true;
-  const g = new THREE.Group(); g.add(m);
+  // felled log bench: irregular bark cylinder with a flattened, adzed top where people sit, knots, end-grain
+  // caps with checks, and two chocks keeping it from rolling.
+  const g = new THREE.Group(), M = kitMaterials(textures), B = new Batch();
+  const bark = new THREE.MeshStandardMaterial({ name: 'seatBark', vertexColors: true, map: textures.bark_brown_02.diff, normalMap: textures.bark_brown_02.nor, roughnessMap: textures.bark_brown_02.arm, roughness: 1 });
+  const geo = new THREE.CylinderGeometry(0.22, 0.24, len, 28, 10, false);
+  geo.rotateZ(Math.PI / 2);
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), r = Math.hypot(y, z); if (r < 1e-4) continue;
+    const a = Math.atan2(z, y), k = 1 + 0.04 * Math.sin(a * 3 + x * 1.3) + 0.025 * Math.sin(x * 4.1 + a);
+    let ny = y * k, nz = z * k;
+    if (ny > 0.17) ny = 0.17 + (ny - 0.17) * 0.15; // flattened seat face
+    p.setXYZ(i, x, ny, nz);
+  }
+  geo.computeVertexNormals();
+  const Tm = T(0, 0.2, 0);
+  B.add(geo, bark, Tm, 0xb8aca0, { local: true, face: (c, n) => (Math.abs(n.x) > 0.9 ? M.endgrain : c.y > 0.16 && n.y > 0.85 ? { mat: M.wood, color: 0xb89870 } : null) });
+  // knots
+  const rnd = mulberry32(len * 10 | 0);
+  for (let i = 0; i < 4; i++) { const x = (rnd() - 0.5) * len * 0.8, a = rnd() * Math.PI + Math.PI * 0.1; B.add(sphere(0.03, 10, 6), bark, T(x, 0.2 + Math.cos(a) * 0.21, Math.sin(a) * 0.21 * (rnd() > 0.5 ? 1 : -1), 0, 0, 0, 1, 0.5, 1), 0x6a5a4a); }
+  // chocks
+  for (const x of [-len * 0.3, len * 0.3]) for (const sz of [-1, 1]) B.add(pie(0.06, 0.12, 1.2, 0, 3, x * 10 + sz).rotateY(Math.PI / 2), M.wood, T(x, 0.035, sz * 0.22, 0, 0, 0), 0xa88458);
+  B.build(g, 'logseat');
   return g;
 }
 
@@ -294,80 +334,135 @@ export function buildDock(textures, length = 14) {
 }
 
 export function buildLantern() {
-  const g = new THREE.Group();
-  const metal = new THREE.MeshStandardMaterial({ color: 0x2b3a2e, metalness: 0.8, roughness: 0.35 });
-  const glass = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.05, metalness: 0, clearcoat: 1, transparent: true, opacity: 0.28, depthWrite: false });
+  // hurricane (storm) lantern: fuel tank, wire guard, glass globe, chimney cap with vents, bail handle.
+  // userData.light / userData.flame are driven by main.js.
+  const g = new THREE.Group(), M = kitMaterials(), B = new Batch();
+  const green = 0x2b3a2e;
+  B.add(lathe([[0.001, 0], [0.075, 0], [0.085, 0.01], [0.088, 0.035], [0.078, 0.052], [0.05, 0.058], [0.035, 0.062], [0.001, 0.062]], 28), M.paint, null, green, { shade: (q, n, c) => { if (q.y < 0.012) c.multiplyScalar(0.6); } });
+  B.add(cyl(0.012, 0.012, 0.018, 12), M.metal, T(0.06, 0.066, 0), 0xa89060); // filler cap
+  B.add(cyl(0.004, 0.004, 0.04, 6).rotateZ(Math.PI / 2), M.metal, T(0.06, 0.075, -0.03), 0x888888); // wick knob stem
+  B.add(cyl(0.012, 0.012, 0.004, 12).rotateZ(Math.PI / 2), M.metal, T(0.082, 0.075, -0.03), 0x888888);
+  // burner collar
+  B.add(cyl(0.03, 0.035, 0.02, 20), M.metal, T(0, 0.072, 0), 0x9a8a60);
+  // side tubes (the "tubular" frame) from tank to top
+  for (const sx of [-1, 1]) B.add(tube([[sx * 0.078, 0.05, 0], [sx * 0.085, 0.14, 0], [sx * 0.078, 0.23, 0], [sx * 0.05, 0.26, 0]], 0.006, 16, 6), M.paint, null, green);
+  // wire guard around the globe
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + 0.26; B.add(tube([[Math.cos(a) * 0.058, 0.085, Math.sin(a) * 0.058], [Math.cos(a) * 0.072, 0.15, Math.sin(a) * 0.072], [Math.cos(a) * 0.05, 0.225, Math.sin(a) * 0.05]], 0.0016, 10, 3), M.metal, null, 0x777a7c); }
+  for (const y of [0.12, 0.18]) B.add(torus(0.068, 0.0016, 3, 28), M.metal, T(0, y, 0, Math.PI / 2, 0, 0), 0x777a7c);
+  // chimney: cone + vented cap
+  B.add(lathe([[0.065, 0.225], [0.07, 0.232], [0.045, 0.265], [0.03, 0.28], [0.028, 0.29]], 24), M.paint, null, green);
+  B.add(cyl(0.034, 0.034, 0.02, 16), M.paint, T(0, 0.3, 0), green);
+  for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; B.add(box(0.008, 0.006, 0.003), M.rubber, T(Math.cos(a) * 0.034, 0.3, Math.sin(a) * 0.034, 0, -a + Math.PI / 2, 0), 0x0a0a0a); }
+  B.add(cyl(0.036, 0.036, 0.004, 16), M.paint, T(0, 0.312, 0), green);
+  // bail handle + grip
+  B.add(tube([[-0.05, 0.26, 0], [-0.055, 0.34, 0], [0, 0.37, 0], [0.055, 0.34, 0], [0.05, 0.26, 0]], 0.0022, 24, 4), M.metal, null, 0x777a7c);
+  B.add(cyl(0.008, 0.008, 0.04, 10).rotateZ(Math.PI / 2), M.wood, T(0, 0.37, 0), 0x6a4a30);
+  B.build(g, 'lantern');
+  // globe (transparent, separate so it sorts correctly) + wick flame
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0xfff4e0, roughness: 0.05, metalness: 0, clearcoat: 1, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide });
+  const globe = new THREE.Mesh(lathe([[0.03, 0.078], [0.052, 0.1], [0.06, 0.15], [0.052, 0.2], [0.04, 0.225]], 28), glass); g.add(globe);
   const flame = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 2.2, 0.8) });
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.05, 20), metal); base.position.y = 0.025;
-  const glassM = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.16, 20, 1, true), glass); glassM.position.y = 0.13;
-  const top = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.06, 20), metal); top.position.y = 0.24;
-  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.004, 6, 24, Math.PI), metal); handle.position.y = 0.27;
-  const f = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), flame); f.scale.y = 1.8; f.position.y = 0.12;
-  for (const m of [base, glassM, top]) m.castShadow = true;
-  g.add(base, glassM, top, handle, f);
-  const light = new THREE.PointLight(0xffb870, 0, 9, 2); light.position.y = 0.13;
+  const f = new THREE.Mesh(new THREE.SphereGeometry(0.009, 10, 8), flame); f.scale.set(1, 2.6, 1); f.position.y = 0.105; g.add(f);
+  const light = new THREE.PointLight(0xffb870, 0, 9, 2); light.position.y = 0.14;
   g.add(light);
   g.userData = { light, flame: f };
   return g;
 }
 
 export function buildChair() {
-  const g = new THREE.Group();
-  const frame = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.7, roughness: 0.4 });
-  const cloth = new THREE.MeshStandardMaterial({ color: 0x2e4f6e, roughness: 0.8, side: THREE.DoubleSide });
-  const leg = (x1, z1, x2, z2) => {
-    const a = new THREE.Vector3(x1, 0, z1), b = new THREE.Vector3(x2, 0.45, z2);
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, a.distanceTo(b)), frame);
-    m.position.copy(a).lerp(b, 0.5); m.lookAt(b); m.rotateX(Math.PI / 2); g.add(m);
-  };
-  leg(-0.25, -0.25, 0.25, 0.25); leg(0.25, -0.25, -0.25, 0.25); leg(-0.25, 0.25, 0.25, -0.25); leg(0.25, 0.25, -0.25, -0.25);
-  const seat = new THREE.PlaneGeometry(0.52, 0.5, 8, 8); seat.rotateX(-Math.PI / 2);
-  const p = seat.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, -0.06 * (1 - (p.getX(i) / 0.26) ** 2) * (1 - (p.getZ(i) / 0.25) ** 2));
+  // folding director-style camp chair: powder-coated X frame, canvas seat + back with piping, armrest
+  // straps and a mesh cup holder. Backrest at local +z; the sitter faces local -z.
+  const g = new THREE.Group(), M = kitMaterials(), B = new Batch();
+  const frame = 0x22262a, cloth = 0x2e4f6e, piping = 0x1b2f42;
+  const leg = (a, b) => B.add(loft([a, a.clone().lerp(b, 0.5), b], () => [0.011, 0.011], 3, 10), M.paint, null, frame);
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  // side X's
+  for (const sx of [-1, 1]) { leg(V(sx * 0.26, 0.01, -0.26), V(sx * 0.26, 0.46, 0.25)); leg(V(sx * 0.26, 0.01, 0.25), V(sx * 0.26, 0.46, -0.26)); B.add(cyl(0.008, 0.008, 0.03, 8).rotateZ(Math.PI / 2), M.metal, T(sx * 0.27, 0.235, 0), 0x9aa0a6); }
+  // front/back X
+  for (const sz of [-1, 1]) { leg(V(-0.26, 0.01, sz * 0.25), V(0.26, 0.46, sz * 0.25)); leg(V(0.26, 0.01, sz * 0.25), V(-0.26, 0.46, sz * 0.25)); }
+  // back uprights + feet caps
+  for (const sx of [-1, 1]) { leg(V(sx * 0.26, 0.46, 0.25), V(sx * 0.25, 0.9, 0.33)); for (const sz of [-1, 1]) B.add(sphere(0.016, 8, 6), M.rubber, T(sx * 0.26, 0.012, sz * 0.25 + (sz < 0 ? -0.01 : 0)), 0x151515); }
+  // seat: sagging canvas with piping at the edges + seam
+  const seat = new THREE.PlaneGeometry(0.52, 0.5, 12, 12); seat.rotateX(-Math.PI / 2);
+  const p = seat.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, -0.065 * (1 - (p.getX(i) / 0.26) ** 2) * (1 - (p.getZ(i) / 0.25) ** 2));
   seat.computeVertexNormals();
-  const s = new THREE.Mesh(seat, cloth); s.position.y = 0.45; s.castShadow = true; g.add(s);
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.5, 4, 4), cloth); back.position.set(0, 0.72, 0.28); back.rotation.x = -0.25; back.castShadow = true; g.add(back);
+  B.add(seat, M.fabric, T(0, 0.46, 0), cloth, { shade: (q, n, c) => { if (Math.abs(q.x) > 0.24 || Math.abs(q.z) > 0.23) c.set(piping); } });
+  for (const sx of [-1, 1]) B.add(cyl(0.012, 0.012, 0.52, 8).rotateX(Math.PI / 2), M.fabric, T(sx * 0.262, 0.465, 0), piping);
+  // back panel: slight curve, sleeves over the uprights
+  const back = new THREE.PlaneGeometry(0.5, 0.4, 10, 6); const bp = back.attributes.position; for (let i = 0; i < bp.count; i++) bp.setZ(i, 0.035 * (1 - (bp.getX(i) / 0.25) ** 2)); back.computeVertexNormals();
+  B.add(back, M.fabric, T(0, 0.7, 0.3, -0.18, 0, 0), cloth, { shade: (q, n, c) => { if (q.y > 0.88 || q.y < 0.52) c.set(piping); } });
+  for (const sx of [-1, 1]) B.add(cyl(0.017, 0.017, 0.4, 8), M.fabric, T(sx * 0.252, 0.7, 0.3, -0.18, 0, 0), piping);
+  // armrest straps + cup holder
+  for (const sx of [-1, 1]) B.add(ribbon([[sx * 0.265, 0.62, 0.29], [sx * 0.27, 0.6, 0.0], [sx * 0.265, 0.49, -0.26]], 0.045, 0.004, 10, V(1, 0, 0).set(0, 1, 0)), M.fabric, null, piping);
+  B.add(cyl(0.045, 0.04, 0.09, 16, 1, true), M.fabric, T(0.33, 0.56, -0.12), 0x222222);
+  B.add(torus(0.045, 0.004, 5, 16), M.paint, T(0.33, 0.605, -0.12, Math.PI / 2, 0, 0), frame);
+  B.build(g, 'chair');
   return g;
 }
 
 export function buildKettle() {
-  const g = new THREE.Group();
-  const m = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, metalness: 0.85, roughness: 0.45 });
-  const pts = [[0, 0], [0.1, 0], [0.12, 0.02], [0.125, 0.1], [0.1, 0.15], [0.05, 0.17], [0.03, 0.19], [0, 0.19]].map(([x, y]) => new THREE.Vector2(x, y));
-  const body = new THREE.Mesh(new THREE.LatheGeometry(pts, 32), m); body.castShadow = true; g.add(body);
-  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.02, 0.12, 8), m); spout.position.set(0.14, 0.12, 0); spout.rotation.z = -0.9; g.add(spout);
-  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.006, 6, 24, Math.PI), m); handle.position.y = 0.19; g.add(handle);
+  // enamelled camp kettle: body with shoulder, lid + knob, curved spout, wire bail with wooden grip, soot on
+  // the bottom half (it hangs over the fire).
+  const g = new THREE.Group(), M = kitMaterials(), B = new Batch();
+  const col = 0x2c5a7a;
+  B.add(lathe([[0.001, 0], [0.095, 0], [0.108, 0.008], [0.118, 0.04], [0.12, 0.09], [0.11, 0.13], [0.08, 0.155], [0.06, 0.16], [0.06, 0.168]], 32), M.enamel, null, col, { shade: (q, n, c) => { const t = Math.max(0, 1 - q.y / 0.08); c.lerp(new THREE.Color(0x0c0b0a), t * 0.9); if (q.y > 0.085 && q.y < 0.09) c.multiplyScalar(0.75); } });
+  B.add(lathe([[0.001, 0.178], [0.05, 0.178], [0.062, 0.168], [0.064, 0.164]], 28), M.enamel, null, col);
+  B.add(sphere(0.014, 12, 8), M.wood, T(0, 0.19, 0, 0, 0, 0, 1, 0.8, 1), 0x3a2418);
+  // spout: tapered loft rising from the belly
+  B.add(loft([[0.1, 0.06, 0], [0.145, 0.1, 0], [0.165, 0.15, 0], [0.185, 0.17, 0]], (t) => [0.022 - 0.013 * t, 0.022 - 0.013 * t], 12, 12, false), M.enamel, null, col);
+  // bail + ears
+  for (const sz of [-1, 1]) B.add(torus(0.008, 0.003, 5, 10), M.metal, T(0, 0.15, sz * 0.105, 0, 0, 0), 0x777777);
+  B.add(tube([[0, 0.15, -0.105], [0, 0.23, -0.09], [0, 0.26, 0], [0, 0.23, 0.09], [0, 0.15, 0.105]], 0.0025, 20, 5), M.metal, null, 0x777777);
+  B.add(cyl(0.009, 0.009, 0.06, 10).rotateX(Math.PI / 2), M.wood, T(0, 0.262, 0), 0x3a2418);
+  B.build(g, 'kettle');
   return g;
 }
 
 // tripod + grill over fire
 export function buildTripod() {
-  const g = new THREE.Group();
-  const m = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.5 });
+  // blacksmith tripod: 3 legs through a top ring, S-hook chain, round grate with radial bars. The kettle hangs
+  // at y=0.81 on the grate (main.js).
+  const g = new THREE.Group(), M = kitMaterials(), B = new Batch();
+  const iron = 0x222222, top = new THREE.Vector3(0, 1.3, 0);
   for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI * 2;
-    const base = new THREE.Vector3(Math.cos(a) * 0.75, 0, Math.sin(a) * 0.75), top = new THREE.Vector3(0, 1.3, 0);
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, base.distanceTo(top)), m);
-    leg.position.copy(base).lerp(top, 0.5); leg.lookAt(top); leg.rotateX(Math.PI / 2); leg.castShadow = true; g.add(leg);
+    const a = (i / 3) * Math.PI * 2, base = new THREE.Vector3(Math.cos(a) * 0.75, 0, Math.sin(a) * 0.75);
+    const tip = top.clone().add(new THREE.Vector3(-Math.cos(a) * 0.05, 0.06, -Math.sin(a) * 0.05));
+    B.add(loft([base, base.clone().lerp(tip, 0.5), tip], () => [0.011, 0.011], 3, 8), M.iron, null, iron);
+    B.add(cyl(0.004, 0.012, 0.05, 8), M.iron, T(base.x, 0.015, base.z), iron); // spike foot
   }
-  const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.5), m); chain.position.y = 1.05; g.add(chain);
-  const grill = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.008, 6, 32), m); grill.rotation.x = Math.PI / 2; grill.position.y = 0.8; g.add(grill);
-  for (let i = -3; i <= 3; i++) { const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.55 * Math.sqrt(1 - (i / 3.5) ** 2)), m); bar.rotation.z = Math.PI / 2; bar.position.set(0, 0.8, i * 0.075); g.add(bar); }
+  B.add(torus(0.025, 0.008, 6, 14), M.iron, T(0, 1.3, 0, Math.PI / 2, 0, 0), iron);
+  // chain links from ring to grate
+  for (let i = 0; i < 17; i++) B.add(torus(0.012, 0.0025, 4, 10), M.iron, T(0, 1.27 - i * 0.026, 0, 0, i % 2 ? Math.PI / 2 : 0, 0, 1, 1.6, 1), iron);
+  for (let i = 0; i < 3; i++) { const a = i / 3 * 6.28; B.add(cyl(0.002, 0.002, 0.36, 4), M.iron, T(Math.cos(a) * 0.14, 0.97, Math.sin(a) * 0.14, Math.sin(a) * 0.39, 0, -Math.cos(a) * 0.39), iron); }
+  // grate: rim + 12 radial bars + inner ring
+  B.add(torus(0.28, 0.008, 6, 40), M.iron, T(0, 0.8, 0, Math.PI / 2, 0, 0), iron);
+  B.add(torus(0.1, 0.006, 6, 24), M.iron, T(0, 0.8, 0, Math.PI / 2, 0, 0), iron);
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI; B.add(cyl(0.004, 0.004, 0.56, 5).rotateZ(Math.PI / 2), M.iron, T(0, 0.8, 0, 0, a, 0), iron); }
+  B.build(g, 'tripod');
   return g;
 }
 
 export function buildWoodPile(textures) {
-  const g = new THREE.Group();
-  const bark = new THREE.MeshStandardMaterial({ map: textures.bark_brown_02.diff, normalMap: textures.bark_brown_02.nor, roughness: 1 });
-  const cut = new THREE.MeshStandardMaterial({ color: 0xa88458, roughness: 0.9 });
-  const rnd = mulberry32(12);
-  let n = 0;
+  // split firewood stacked between two stakes on two rails; pieces are pie slices with bark on the arc and
+  // end grain on the cut faces. Each log is its own mesh (interactions may remove logs one by one via
+  // userData.logs), sharing 3 materials.
+  const g = new THREE.Group(), M = kitMaterials(textures);
+  const bark = new THREE.MeshStandardMaterial({ name: 'pileBark', vertexColors: true, map: textures.bark_brown_02.diff, normalMap: textures.bark_brown_02.nor, roughness: 1 });
+  const rnd = mulberry32(12), logs = [];
+  const add = (geo, mat, m, color, opt) => { const b = new Batch(); b.add(geo, mat, m, color, opt); const ms = b.build(g, 'pile'); return ms; };
+  // base rails + stakes
+  for (const z of [-0.16, 0.16]) add(cyl(0.035, 0.035, 1.05, 8).rotateZ(Math.PI / 2), bark, T(0, 0.035, z), 0x9a8a7a);
+  for (const x of [-0.5, 0.5]) add(cyl(0.022, 0.026, 0.75, 8), bark, T(x, 0.33, 0, 0, 0, x > 0 ? -0.06 : 0.06), 0x8a7a6a);
   for (let row = 0; row < 4; row++) for (let i = 0; i < 6 - row; i++) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.08, 0.5, 7), [bark, cut, cut]);
-    m.rotation.x = Math.PI / 2; m.rotation.y = (rnd() - 0.5) * 0.1;
-    m.position.set((i - (5 - row) / 2) * 0.16, 0.08 + row * 0.14, (rnd() - 0.5) * 0.04);
-    m.castShadow = true; g.add(m); n++;
+    const R = 0.08 + rnd() * 0.02, ang = Math.PI * (0.45 + rnd() * 0.5), a0 = rnd() * 6.28;
+    const geo = pie(R, 0.46 + rnd() * 0.06, ang, a0, 5, row * 10 + i);
+    const b = new Batch();
+    const m = T((i - (5 - row) / 2) * 0.16, 0.1 + row * 0.13, (rnd() - 0.5) * 0.04, 0, (rnd() - 0.5) * 0.12, rnd() * 6.28);
+    b.add(geo, bark, m, 0xa89888, { local: true, face: pieFace(M.endgrain, bark, M.wood, [0xd9b98a, 0xcfae80, 0xe0c498][i % 3]) });
+    const sub = new THREE.Group(); b.build(sub, 'log'); sub.children.forEach((c) => { c.castShadow = true; });
+    g.add(sub); logs.push(sub);
   }
-  g.userData.logs = g.children.slice();
+  g.userData.logs = logs;
   return g;
 }
 
