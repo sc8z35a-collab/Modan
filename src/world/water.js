@@ -132,7 +132,9 @@ export class Water {
           vec2 ruv = vRUV.xy / vRUV.w + n.xz * 0.045;
           vec3 refl = texture2D(tReflect, ruv).rgb;
           // absorption
-          float a = 1.0 - exp(-depth * 0.8);
+          // gentler absorption in the first metre: the lake bed drops ~0.7m within 1m of the shore, so a linear
+          // Beer-Lambert curve gave almost no visible shallows (reported by C)
+          float a = 1.0 - exp(-pow(depth, 1.35) * 0.62);
           vec3 body = mix(uShallow, uDeep, a) * (1.0 - uNight*0.9);
           // subsurface-ish scatter
           body += vec3(0.03,0.045,0.02) * max(uSunDir.y,0.0) * (1.0 - a);
