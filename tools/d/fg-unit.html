@@ -1,0 +1,37 @@
+<!doctype html><meta charset="utf-8"><body><pre id="o"></pre><script type="module">
+import { FieldGuide } from '/src/ui/fieldguide.js';
+localStorage.clear();
+const out = []; const ok = (c, m) => out.push((c ? 'PASS ' : 'FAIL ') + m);
+const toasts = [];
+const ui = { toast: (m) => toasts.push(m), showCatch(f) { this.caught = f; } };
+const g = { ui, input: { reset() {} }, audio: {}, state: { inv: { mushroom: 0, berry: 0 } }, paused: false };
+const fg = new FieldGuide(g);
+// 1 catch hook
+ui.showCatch({ name: 'イワナ', size: 33 }); ok(fg.data.seen.iwana && fg.data.best.iwana === 33, 'catch unlocks iwana + best');
+ok(ui.caught?.name === 'イワナ', 'original showCatch still called');
+ui.showCatch({ name: 'イワナ', size: 20 }); ok(fg.data.best.iwana === 33, 'smaller catch keeps best');
+// 2 double hook guard (update re-hooks)
+fg.update(1, { x: 0, z: 0, night: 0, lakeDist: 50 }); const before = toasts.length; ui.showCatch({ name: 'ヤマメ', size: 25 });
+ok(toasts.length === before + 1, 'no double toast after re-hook check (got ' + (toasts.length - before) + ')');
+// 3 pause restore
+g.paused = true; fg.open(); fg.close(); ok(g.paused === true, 'close restores paused=true (menu)');
+g.paused = false; fg.open(); ok(g.paused === true, 'open pauses'); fg.close(); ok(g.paused === false, 'close unpauses');
+// 4 gathering via inv diff
+g.state.inv.mushroom = 1; fg.update(1, { x: 0, z: 0, night: 0, lakeDist: 50 });
+ok(fg.data.seen.porcini || fg.data.seen.chanterelle, 'mushroom unlock');
+g.state.inv.berry = 3; fg.update(1, { x: 0, z: 0, night: 0, lakeDist: 50 }); ok(fg.data.seen.bilberry, 'berry unlock');
+// 5 walking
+let x = 0; for (let i = 0; i < 60; i++) { x += 1.5; fg.update(1, { x, z: 0, night: 0, lakeDist: 50 }); }
+ok(fg.data.seen.spruce && fg.data.seen.pine && fg.data.seen.fern, 'walking unlocks trees/fern');
+// 6 teleport should not count as walking (clamped to 3m/step)
+const fg2w = fg._walk; fg.update(1, { x: 5000, z: 0, night: 0, lakeDist: 50 }); ok(fg._walk - fg2w <= 3, 'teleport clamped');
+// 7 heard
+fg.heard('owl'); ok(!fg.data.seen.owl, 'owl needs 2 calls'); fg.heard('owl'); ok(fg.data.seen.owl, 'owl unlocked');
+// 8 persistence
+const fg3 = new FieldGuide(g); ok(fg3.data.seen.iwana && fg3.data.best.iwana === 33, 'persisted');
+ok(document.querySelectorAll('#fieldguide').length === 2, 'two instances -> ' + document.querySelectorAll('#fieldguide').length + ' roots (dup ids)');
+// 9 corrupt storage
+localStorage.setItem('modan-fieldguide', '{"seen":null,"best":5}'); const fg4 = new FieldGuide(g); ok(typeof fg4.data.seen === 'object' && fg4.data.seen && typeof fg4.data.best === 'object', 'corrupt storage tolerated');
+localStorage.setItem('modan-fieldguide', '[1,2]'); const fg5 = new FieldGuide(g); ok(fg5.unlock('loon', true) === true, 'array storage tolerated');
+document.getElementById('o').textContent = out.join('\n'); window.__res = out;
+</script>
