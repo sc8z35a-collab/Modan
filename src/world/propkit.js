@@ -331,7 +331,13 @@ export function kitTextures() {
 // shared materials (vertex coloured, one draw call per material after batching)
 let _mats = null;
 export function kitMaterials(textures) {
-  if (_mats) return _mats;
+  if (_mats) {
+    // first caller may have had no textures (buildChair/buildLantern): upgrade the cached bark later instead of
+    // keeping the plain-grain fallback forever
+    const bk = textures?.bark_brown_02;
+    if (bk?.diff && _mats.bark.map !== bk.diff) { _mats.bark.map = bk.diff; _mats.bark.normalMap = bk.nor || null; _mats.bark.needsUpdate = true; }
+    return _mats;
+  }
   const t = kitTextures();
   const bk = textures?.bark_brown_02;
   const mats = {

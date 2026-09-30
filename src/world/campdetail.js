@@ -461,7 +461,7 @@ export function buildCampDetails(ctx) {
     const pa = 0.55, [bx, bz] = toW(Math.cos(pa) * 1.47, Math.sin(pa) * 1.47);
     const out = Math.atan2(Math.cos(pa) * c + Math.sin(pa) * s, -Math.cos(pa) * s + Math.sin(pa) * c);
     B.with(T(bx, heightAt(bx, bz) - 0.01, bz, 0, out, 0).multiply(T(0, 0, 0, -0.2, 0, 0)), () => backpack(B, M, R, () => 0.01));
-    addCol(bx, bz, 0.25, 'pack');
+    // (no own collider: the pack leans on the fly, inside the tent's 1.55m collider)
     const [ox, oz] = toW(0.62, 1.55);
     place(ox, oz, tR + 0.3, (gh) => boots(B, M, R, gh));
   }
@@ -474,6 +474,9 @@ export function buildCampDetails(ctx) {
     B.add(cyl(0.035, 0.035, 0.004, 10), M.endgrain, T(pB[0] - 0.04, hB + 2.05, pB[1] + 0.03), 0xb09070);
     addCol(pB[0], pB[1], 0.12, 'pole');
     clothesline(B, M, R, V3(pA[0] - 0.035, heightAt(pA[0], pA[1]) + 1.85, pA[1] - 0.02), V3(pB[0] - 0.04, hB + 1.9, pB[1] + 0.02), U, sway);
+    // laundry hangs 1.26-1.45m above ground = below eye height (1.65): walking through it put the camera inside the
+    // towels. Block the hung section (t 0.25..0.8) with a chain of small colliders.
+    for (let t = 0.27; t <= 0.8; t += 0.09) addCol(pA[0] + (pB[0] - pA[0]) * t, pA[1] + (pB[1] - pA[1]) * t, 0.22, 'laundry');
   }
   // camp sign where the path leaves toward the lake
   {

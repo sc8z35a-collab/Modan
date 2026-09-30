@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { heightAt } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
+import { addAxe } from './campdetail.js';
 import { Batch, T, kitMaterials, kitTextures, rbox, box, cyl, tube, loft, sphere, torus, lathe, ribbon, pie, pieFace, jitter, smoothNormals } from './propkit.js';
 
 // deterministic 0..1 hash of a position (identical for coincident vertices of non-indexed geometry)
@@ -462,24 +463,40 @@ export function buildWoodPile(textures) {
 
 // fishing rod held in first-person
 export function buildRod() {
-  const g = new THREE.Group();
-  const cork = new THREE.MeshStandardMaterial({ color: 0x9c7a50, roughness: 0.9 });
-  const blank = new THREE.MeshStandardMaterial({ color: 0x1b2430, metalness: 0.3, roughness: 0.35 });
-  const h = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.35, 10), cork); h.position.y = 0.17; g.add(h);
-  const b = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.012, 2.1, 8), blank); b.position.y = 1.4; g.add(b);
-  const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 16), new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9, roughness: 0.3 }));
-  reel.rotation.z = Math.PI / 2; reel.position.set(0.03, 0.3, 0); g.add(reel);
+  // spinning rod held in first person: cork split grip, reel seat, fixed-spool reel with handle + bail, tapered
+  // blank with 6 guides and wraps. Rod space: butt at y=0, tip at y=2.45 (viewmodel.tip).
+  const g = new THREE.Group(), M = kitMaterials(), B = new Batch();
+  const blank = 0x1b2430, wrap = 0xb83a22;
+  B.add(cyl(0.019, 0.021, 0.2, 14), M.wood, T(0, 0.1, 0), 0xc8a070, { shade: (q, n, c) => { if (((q.y * 90) | 0) % 3 === 0) c.multiplyScalar(0.88); } }); // rear cork
+  B.add(cyl(0.017, 0.017, 0.09, 14), M.metal, T(0, 0.245, 0), 0x2a2e33); // reel seat
+  B.add(cyl(0.018, 0.016, 0.1, 14), M.wood, T(0, 0.34, 0), 0xc8a070); // fore grip
+  B.add(cyl(0.004, 0.012, 2.06, 10), M.paint, T(0, 1.42, 0), blank, { shade: (q, n, c) => { c.multiplyScalar(0.9 + 0.2 * Math.max(0, n.x)); } });
+  B.add(sphere(0.004, 6, 4), M.metal, T(0, 2.45, 0), 0xc0c0c0); // tip top
+  for (let i = 0; i < 6; i++) {
+    const y = 0.62 + (1 - Math.pow(1 - i / 5, 1.4)) * 1.75, r = 0.018 - i * 0.0024, rb = 0.012 - i * 0.0014;
+    B.add(cyl(rb + 0.0012, rb + 0.0012, 0.03, 8), M.paint, T(0, y, 0), wrap); // thread wrap
+    B.add(cyl(0.0012, 0.0012, r * 1.4, 4), M.metal, T(0.0, y, rb + r * 0.7, Math.PI / 2, 0, 0), 0xb0b4b8); // foot
+    B.add(torus(r, 0.0016, 4, 14), M.metal, T(0, y + 0.004, rb + r * 1.4 + r, 0, 0, 0), 0xb0b4b8); // ring
+  }
+  // fixed-spool reel under the rod (at +z)
+  B.with(T(0, 0.25, 0.045), () => {
+    B.add(box(0.012, 0.012, 0.05), M.metal, T(0, 0, -0.02), 0x3a3e42); // stem
+    B.add(cyl(0.03, 0.028, 0.045, 18), M.metal, T(0, 0.02, 0.03), 0x3a3e42); // body
+    B.add(cyl(0.026, 0.026, 0.03, 18), M.metal, T(0, 0.055, 0.03), 0xc8ccd0); // spool
+    B.add(cyl(0.022, 0.022, 0.028, 18), M.plastic, T(0, 0.055, 0.03), 0xe8e4d0); // line on spool
+    B.add(torus(0.032, 0.002, 4, 18, Math.PI), M.metal, T(0, 0.07, 0.03, Math.PI / 2, 0, 0), 0xd0d4d8); // bail
+    B.add(cyl(0.003, 0.003, 0.05, 6).rotateZ(Math.PI / 2), M.metal, T(0.04, 0.02, 0.03), 0x3a3e42); // handle arm
+    B.add(cyl(0.006, 0.006, 0.02, 8), M.plastic, T(0.065, 0.02, 0.045, Math.PI / 2, 0, 0), 0x111111); // knob
+  });
+  B.build(g, 'rod');
   return g;
 }
 
 export function buildAxe(textures) {
-  const g = new THREE.Group();
-  const wood = new THREE.MeshStandardMaterial({ color: 0x8a6238, roughness: 0.6 });
-  const steel = new THREE.MeshStandardMaterial({ color: 0x777d82, metalness: 1, roughness: 0.3 });
-  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.02, 0.7, 10), wood); handle.position.y = 0.35; g.add(handle);
-  const shape = new THREE.Shape(); shape.moveTo(0, 0.03); shape.lineTo(0.14, 0.07); shape.quadraticCurveTo(0.17, 0, 0.14, -0.07); shape.lineTo(0, -0.03); shape.lineTo(-0.04, -0.025); shape.lineTo(-0.04, 0.025);
-  const head = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.025, bevelEnabled: true, bevelSize: 0.004, bevelThickness: 0.004 }), steel);
-  head.position.set(0, 0.66, -0.0125); g.add(head);
+  // same axe model as the one stuck in the chopping block (campdetail addAxe): hickory handle, forged head
+  const g = new THREE.Group(), M = kitMaterials(textures), B = new Batch();
+  addAxe(B, M, new THREE.Matrix4());
+  B.build(g, 'axe');
   return g;
 }
 
