@@ -8,6 +8,7 @@ import { Grass } from './world/grass.js';
 import { WORLD, heightAt, lakeDist } from './world/heightfield.js';
 import { PATH_PTS } from './world/terrain.js';
 import * as P from './world/props.js';
+import { buildCampDetails } from './world/campdetail.js';
 import { Campfire, Fireflies } from './fx/fire.js';
 import { Particles } from './fx/particles.js';
 import { AudioEngine } from './audio/audio.js';
@@ -168,6 +169,7 @@ class Game {
     // tent
     const tx0 = C.x - 6.5, tz0 = C.z + 3.5;
     this.tent = put(P.buildTent(U), tx0, tz0, 0.9, 0.02);
+    P.settleToGround(this.tent, heightAt); // [lane B] stakes / guy lines / hem followed a flat plane (floated up to 9cm)
     this.tentPos = new THREE.Vector3(tx0 + Math.sin(0.9) * 1.8, 0, tz0 + Math.cos(0.9) * 1.8);
     this.world.colliders.add(tx0, tz0, 1.55, 'tent');
     // seats
@@ -183,14 +185,8 @@ class Game {
     // lanterns
     this.lanterns = [];
     const l1 = put(P.buildLantern(), C.x - 4.4, C.z + 5.8); this.lanterns.push(l1);
-    // table w/ lantern (simple folding table)
-    const table = new THREE.Group();
-    const top = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.03, 0.6), new THREE.MeshStandardMaterial({ map: tx.brown_planks_05.diff, normalMap: tx.brown_planks_05.nor, roughness: 0.7 }));
-    top.position.y = 0.7; top.castShadow = top.receiveShadow = true; table.add(top);
-    for (const [a, b] of [[-0.5, -0.25], [0.5, -0.25], [-0.5, 0.25], [0.5, 0.25]]) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.7), new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.4 })); l.position.set(a, 0.35, b); table.add(l); }
-    const l2 = P.buildLantern(); l2.position.y = 0.715; table.add(l2); this.lanterns.push(l2);
-    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.09, 16), new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.3 })); mug.position.set(-0.3, 0.76, 0.1); table.add(mug);
-    put(table, C.x + 4.2, C.z + 4.2, -0.5);
+    // [lane B] folding slat table (its lantern is lit with the others; table-top items live in campdetail.js)
+    const table = put(P.buildTable(tx), C.x + 4.2, C.z + 4.2, -0.5); this.lanterns.push(table.userData.lantern);
     this.world.colliders.add(C.x + 4.2, C.z + 4.2, 0.6, 'table');
     // string lights between tent and a pole
     // wooden poles for the string lights
@@ -225,27 +221,12 @@ class Game {
       contains: (x, z) => { v.set(x, 0.55, z).applyMatrix4(inv); return Math.abs(v.x) < 1.0 && v.z < 0.3 && v.z > -dockLen; },
     }];
     // rowboat moored at dock
-    this.boat = this.buildBoat(); this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, 0, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
+    this.boat = P.buildRowboat(tx); this.boatCap = this.boat.userData.cap; // [lane B] clinker rowboat, exact waterline cap
+    this.boat.position.copy(this.dockEnd).add(new THREE.Vector3(2.1, 0, 2)); this.boat.rotation.y = 0.2; this.scene.add(this.boat);
     // hull is 0.45m deep with its rim at local y=0: at +0.02 the rim sat 4cm above the lake (boat looked sunk)
     this.boatBaseY = WORLD.waterLevel + 0.26;
-  }
-
-  buildBoat() {
-    const g = new THREE.Group();
-    const wood = new THREE.MeshStandardMaterial({ map: this.assets.textures.brown_planks_05.diff, color: 0x6b8fa0, roughness: 0.7, side: THREE.DoubleSide });
-    // (an unused LatheGeometry hull used to be built and discarded here)
-    const shell = new THREE.SphereGeometry(1, 32, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2.3);
-    shell.scale(0.8, 0.45, 2.2);
-    const m = new THREE.Mesh(shell, wood); m.castShadow = true; g.add(m);
-    // seat was 1.3m wide in a 1.6m hull at a height where the hull is only ~1.2m wide -> poked through the sides
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.04, 0.25), wood); seat.position.y = -0.12; g.add(seat);
-    // depth-only cap at the waterline: keeps the (transparent, later-drawn) lake surface out of the hull
-    const wl = -0.26, k = Math.sqrt(1 - (wl / 0.45) ** 2);
-    const cap = new THREE.Mesh(new THREE.CircleGeometry(1, 32), new THREE.MeshBasicMaterial({ colorWrite: false }));
-    cap.rotation.x = -Math.PI / 2; cap.scale.set(0.8 * k * 0.97, 2.2 * k * 0.97, 1); cap.position.y = wl; cap.renderOrder = 9;
-    g.add(cap); this.boatCap = cap;
-    g.userData.bobT = 0;
-    return g;
+    // [lane B] camp detail props (merged per material, ~15 draw calls)
+    this.campDetails = buildCampDetails({ scene: this.scene, textures: tx, U, heightAt, colliders: this.world.colliders, camp: C, firePos: new THREE.Vector3(fx, heightAt(fx, fz), fz), tent: this.tent, tentOrigin: { x: tx0, z: tz0 }, tentRot: 0.9, poleA, dock: this.dock });
   }
 
   buildStringLights(a, b) {
