@@ -1,0 +1,51 @@
+// Lane B prop viewer: renders only the camp (terrain patch + props) so close-up detail can be checked
+// quickly under SwiftShader. URL: /tools/b/propview.html?cam=x,y,z&look=x,y,z&night=1&w=900&h=500
+import * as THREE from 'three';
+import { WORLD, heightAt } from '../../src/world/heightfield.js';
+import * as P from '../../src/world/props.js';
+const q = new URLSearchParams(location.search);
+const W = +(q.get('w') || 900), H = +(q.get('h') || 500), night = q.has('night');
+const r = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true });
+r.setSize(W, H); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.AgXToneMapping; r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(night ? 0x05070c : 0x9fb8cc);
+const cam = new THREE.PerspectiveCamera(+(q.get('fov') || 55), W / H, 0.02, 200);
+const hemi = new THREE.HemisphereLight(night ? 0x223044 : 0xcfe3ff, night ? 0x0a0806 : 0x5a4a30, night ? 0.25 : 1.1); scene.add(hemi);
+const sun = new THREE.DirectionalLight(night ? 0x8899cc : 0xfff1dc, night ? 0.15 : 2.6); sun.position.set(20, 30, 12); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14, near: 1, far: 80 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+const C = WORLD.camp; sun.target.position.set(C.x, heightAt(C.x, C.z), C.z); sun.position.add(sun.target.position); scene.add(sun, sun.target);
+const tl = new THREE.TextureLoader();
+const ids = ['aerial_grass_rock', 'forest_ground_04', 'rocky_terrain_02', 'bark_brown_02', 'brown_planks_05', 'pine_bark', 'coast_sand_rocks_02'];
+const textures = {};
+await Promise.all(ids.flatMap((id) => { textures[id] = {}; return ['diff', 'nor', 'arm'].map((k) => tl.loadAsync(`../../public/assets/textures/${id}/${k}.jpg`).then((t) => { if (k === 'diff') t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; textures[id][k] = t; })); }));
+// terrain patch 40x40m
+const tg = new THREE.PlaneGeometry(40, 40, 200, 200); tg.rotateX(-Math.PI / 2);
+const tp = tg.attributes.position; for (let i = 0; i < tp.count; i++) { const x = tp.getX(i) + C.x, z = tp.getZ(i) + C.z; tp.setXYZ(i, x, heightAt(x, z), z); } tg.computeVertexNormals();
+const uv = tg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 14, uv.getY(i) * 14);
+const gt = textures.forest_ground_04; scene.add(Object.assign(new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: gt.diff, normalMap: gt.nor, roughness: 1 })), { receiveShadow: true }));
+const U = { uTime: { value: 0 }, uTentGlow: { value: night ? 0.5 : 0 }, uWind: { value: new THREE.Vector2(0.8, 0.35) } };
+const colliders = { list: [], add(x, z, r, tag) { const c = { x, z, r, tag }; this.list.push(c); return c; } };
+// mirror of main.js buildCamp placement
+const put = (o, x, z, ry = 0, yo = 0) => { o.position.set(x, heightAt(x, z) + yo, z); o.rotation.y = ry; scene.add(o); return o; };
+const fx = C.x, fz = C.z, tx = textures;
+put(P.buildFireRing(tx), fx, fz); const logs = put(P.buildFireLogs(tx), fx, fz);
+const trip = put(P.buildTripod(), fx, fz); const k = P.buildKettle(); k.position.set(0, 0.81, 0); trip.add(k);
+const tx0 = C.x - 6.5, tz0 = C.z + 3.5; const tent = put(P.buildTent(U), tx0, tz0, 0.9, 0.02);
+for (const [x, z, rr] of [[fx + 2.4, fz + 0.6, 1.4], [fx - 0.6, fz - 2.5, 0.2]]) put(P.buildLogSeat(tx), x, z, rr);
+put(P.buildChair(), fx + 0.4, fz + 2.6, Math.atan2(0.4, 2.6));
+put(P.buildWoodPile(tx), C.x - 3.5, C.z - 2.2, 0.6);
+const lanterns = [put(P.buildLantern(), C.x - 4.4, C.z + 5.8)];
+if (P.buildTable) { const t = put(P.buildTable(tx), C.x + 4.2, C.z + 4.2, -0.5); if (t.userData.lantern) lanterns.push(t.userData.lantern); }
+let details = null;
+if (q.get('details') !== '0') {
+  try { const m = await import('../../src/world/campdetail.js'); details = m.buildCampDetails({ scene, textures, U, heightAt, colliders, camp: { x: C.x, z: C.z }, tentPos: new THREE.Vector3(tx0, 0, tz0), tentRot: 0.9, firePos: new THREE.Vector3(fx, heightAt(fx, fz), fz), night }); } catch (e) { console.warn('campdetail', e.message); }
+}
+if (night) { for (const l of lanterns) l.userData.light.intensity = 2.2; tent.userData.light.intensity = 1.2; const fl = new THREE.PointLight(0xff8a3a, 6, 12, 2); fl.position.set(fx, heightAt(fx, fz) + 0.5, fz); scene.add(fl); logs.userData.charred.emissiveIntensity = 2; }
+const pc = (q.get('cam') || `${C.x + 3},${heightAt(C.x, C.z) + 1.6},${C.z + 4}`).split(',').map(Number);
+const pl = (q.get('look') || `${C.x},${heightAt(C.x, C.z) + 0.3},${C.z}`).split(',').map(Number);
+// cam/look can be given relative to camp with rel=1
+if (q.has('rel')) { const b = [C.x, heightAt(C.x, C.z), C.z]; for (let i = 0; i < 3; i++) { pc[i] += b[i]; pl[i] += b[i]; } }
+cam.position.set(...pc); cam.lookAt(...pl);
+details?.update?.(0.016, { night: night ? 1 : 0, time: 1, camera: cam });
+r.render(scene, cam); r.render(scene, cam);
+window.__info = { calls: r.info.render.calls, tris: r.info.render.triangles };
+document.title = 'READY';
