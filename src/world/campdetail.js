@@ -210,7 +210,6 @@ function boots(B, M, R, gh) {
     for (let i = 0; i < 5; i++) { const y = 0.1 + i * 0.022, z = -0.005 - i * 0.012; B.add(box(0.06, 0.003, 0.004), M.rope, T(0, y, z, 0.3, 0, (i % 2 ? 0.25 : -0.25)), 0xc23a2a); for (const sx of [-1, 1]) B.add(sphere(0.004, 6, 4), M.metal, T(sx * 0.03, y, z), 0x999999); }
     if (tip) B.add(tube([[0.03, 0.2, -0.03], [0.06, 0.17, 0.02], [0.08, 0.02, 0.06], [0.12, 0.004, 0.1]], 0.0025, 16, 4), M.rope, null, 0xc23a2a);
   });
-  B.add(new THREE.BufferGeometry().setFromPoints([]), M.rubber); // noop (keeps call shape)
   shoe(T(-0.08, gh(-0.08, 0) + 0.002, 0, 0, 0.15, 0), false);
   shoe(T(0.14, gh(0.14, 0.04) + 0.05, 0.04, 0, -0.35, -1.35), true);
   aoLocal(B, M, gh, 0.02, 0, 0.25, 0.22, 0, 0.8);
