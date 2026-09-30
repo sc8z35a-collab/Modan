@@ -178,11 +178,12 @@ function decal(size, idx) {
 
 // spruce cone (~11cm, cylindrical, pointed) lying on its side: lathe with spiral overlapping scales. Three cones
 // per instance at random angles so the forest floor gets small scattered groups
-function pineCone(rnd) {
+function pineCone(seed, radial = 12) {
+  const rnd = mulberry32(seed);
   const one = () => {
     const pts = [];
     for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push(new THREE.Vector2(Math.pow(Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.5), 0.6) * 0.019 * (1.1 - t * 0.75) + 0.002, t * 0.11)); }
-    const g = new THREE.LatheGeometry(pts, 12);
+    const g = new THREE.LatheGeometry(pts, radial);
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x);
@@ -212,10 +213,11 @@ function twigGeo(rnd) {
 
 // moss cushion: lumpy low mound (several merged bumps), fine per-vertex fuzz; vertex colour: brighter tops,
 // dark brown-green where it meets the ground
-function mossCushion(rnd) {
+function mossCushion(seed, detail = 2) {
+  const rnd = mulberry32(seed); // same bump layout for every LOD of the cushion
   const parts = [];
-  for (let k = 0; k < 5; k++) {
-    const b = new THREE.IcosahedronGeometry(0.1 + rnd() * 0.1, 3);
+  for (let k = 0; k < 4; k++) {
+    const b = new THREE.IcosahedronGeometry(0.1 + rnd() * 0.1, detail);
     b.scale(1, 0.45, 1); b.translate((rnd() - 0.5) * 0.3, -0.02, (rnd() - 0.5) * 0.3);
     parts.push(b);
   }
@@ -237,7 +239,7 @@ function reedClump(rnd, n = 22, cattails = 3) {
   const blades = [], heads = [];
   for (let k = 0; k < n; k++) {
     const h = 0.9 + rnd() * 0.9, w = 0.012 + rnd() * 0.01;
-    const b = new THREE.PlaneGeometry(w, h, 1, 4); b.translate(0, h / 2, 0);
+    const b = new THREE.PlaneGeometry(w, h, 1, 3); b.translate(0, h / 2, 0);
     const p = b.attributes.position, lean = (rnd() - 0.2) * 0.35;
     for (let i = 0; i < p.count; i++) { const t = p.getY(i) / h; p.setX(i, p.getX(i) * (1 - t * 0.9)); p.setZ(i, lean * t * t * h); }
     b.rotateY(rnd() * Math.PI); b.translate((rnd() - 0.5) * 0.5, -0.05, (rnd() - 0.5) * 0.5);
@@ -247,7 +249,7 @@ function reedClump(rnd, n = 22, cattails = 3) {
   for (let k = 0; k < cattails; k++) {
     const h = 1.3 + rnd() * 0.5, x = (rnd() - 0.5) * 0.35, z = (rnd() - 0.5) * 0.35;
     const st = new THREE.CylinderGeometry(0.004, 0.006, h, 4, 1, true); st.translate(x, h / 2 - 0.05, z); blades.push(st);
-    const hd = new THREE.CapsuleGeometry(0.016, 0.13, 2, 6); hd.translate(x, h - 0.2, z); heads.push(hd);
+    const hd = new THREE.CapsuleGeometry(0.016, 0.13, 1, 5); hd.translate(x, h - 0.2, z); heads.push(hd);
     const tip = new THREE.CylinderGeometry(0.001, 0.002, 0.12, 3, 1, true); tip.translate(x, h + 0.02, z); blades.push(tip);
   }
   return { blades: mergeGeometries(blades), heads: heads.length ? mergeGeometries(heads) : null };
@@ -333,11 +335,15 @@ export class Flora {
     this.world = world; this.U = world.U; this.q = world.q;
     // own scatter with 128m chunks: ~20 small kinds x 64m chunks would have cost several hundred draw calls
     this.scatter = new Scatter(world.scene, 128);
+    // tiny ground props (cones, moss, pebbles, twigs, fungi) live in a FINE 32m grid: with 128m chunks their
+    // 32-45m cull / LOD distances were meaningless (chunk-level) -> every cone of a chunk drew at LOD0 (~2M tris)
+    this.fine = new Scatter(world.scene, 32);
     this.stats = {}; this.samples = {}; // samples: a few positions per kind (QA viewer aims at them)
   }
 
   build() {
-    const U = this.U, q = this.q, S = this.scatter, WS = this.world.scatter;
+    const U = this.U, q = this.q, S = this.scatter, F = this.fine, WS = this.world.scatter;
+    const sc_ = (name) => (F.kinds.has(name) ? F : S);
     const atlas = paintAtlas();
     const rnd = mulberry32(2718);
     const noise = createNoise2D(515);
@@ -345,7 +351,7 @@ export class Flora {
     const gq = Math.max(0.3, q.grass ?? 1);
 
     // materials
-    const cardMat = windify(new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75, alphaToCoverage: true }), U, 60, true);
+    const cardMat = windify(new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75 }), U, 60, true);
     const decalMat = new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.35, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     const coneMat = new THREE.MeshStandardMaterial({ color: 0x7a4e2c, roughness: 0.85 });
     const twigMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 1 });
@@ -363,10 +369,12 @@ export class Flora {
     const boleteStem = new THREE.MeshStandardMaterial({ color: 0xd8c8a4, roughness: 0.85 });
 
     const def = (name, variants, cull, opts = {}) => {
-      for (let v = 0; v < variants.length; v++) S.defineKind(name + v, [{ dist: cull, parts: variants[v] }], { cullDist: cull });
+      for (let v = 0; v < variants.length; v++) (opts.fine ? F : S).defineKind(name + v, [{ dist: cull, parts: variants[v] }], { cullDist: cull });
       this.stats[name] = 0;
       return variants.length;
     };
+    // near/far LOD kinds (a moss cushion at detail 3 was 6.4k tris -> flora hit 3M tris on ultra)
+    const lod2 = (name, near, far, dNear, cull) => { F.defineKind(name + '0', [{ dist: dNear, parts: near }, { dist: cull, parts: far }], { cullDist: cull }); this.stats[name] = 0; return 1; };
     const m = new THREE.Matrix4(), qt = new THREE.Quaternion(), qy = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
     const UP = new THREE.Vector3(0, 1, 0), nv = new THREE.Vector3();
     const col = new THREE.Color();
@@ -377,7 +385,7 @@ export class Flora {
       if (tilt) { qy.setFromAxisAngle(ps.set(rnd() - 0.5, 0, rnd() - 0.5).normalize(), (rnd() - 0.5) * tilt); qt.premultiply(qy); }
       ps.set(x, h - sink, z); sc.setScalar(s);
       m.compose(ps, qt, sc);
-      S.add(name + ((rnd() * nVar) | 0), m, color);
+      const kn = name + ((rnd() * nVar) | 0); sc_(kn).add(kn, m, color);
       this.stats[name]++; this.sample(name, x, h, z);
     };
     const C = WORLD.camp;
@@ -404,13 +412,13 @@ export class Flora {
     }
 
     // ---- forest floor: litter decals, cones, twigs, moss, mushrooms, saplings
-    const nLitter = def('litter', [6, 7].map((idx) => [{ geo: decal(1.4, idx), mat: decalMat, castShadow: false }]), 55);
-    const nCone = def('cone', [[{ geo: pineCone(rnd), mat: coneMat, castShadow: false }]], 32);
-    const nTwig = def('twig', [0, 1].map(() => [{ geo: twigGeo(rnd), mat: twigMat, castShadow: false }]), 38);
-    const nMoss = def('moss', [0].map(() => [{ geo: mossCushion(rnd), mat: mossMat, castShadow: false }]), 70);
+    const nLitter = def('litter', [6, 7].map((idx) => [{ geo: decal(1.4, idx), mat: decalMat, castShadow: false }]), 55, { fine: true });
+    const nCone = lod2('cone', [{ geo: pineCone(31, 12), mat: coneMat, castShadow: false }], [{ geo: pineCone(31, 5), mat: coneMat, castShadow: false }], 10, 32);
+    const nTwig = def('twig', [0].map(() => [{ geo: twigGeo(rnd), mat: twigMat, castShadow: false }]), 38, { fine: true });
+    const nMoss = lod2('moss', [{ geo: mossCushion(7, 2), mat: mossMat, castShadow: false }], [{ geo: mossCushion(7, 1), mat: mossMat, castShadow: false }], 22, 70);
     const amanita = [0].map(() => mushroomCluster(rnd, 'amanita')), bolete = [0].map(() => mushroomCluster(rnd, 'bolete'));
-    const nAm = def('amanita', amanita.map((c) => [{ geo: c.caps, mat: amanitaCap, castShadow: false }, { geo: c.stems, mat: fungusStem, castShadow: false }]), 40);
-    const nBo = def('bolete', bolete.map((c) => [{ geo: c.caps, mat: boleteCap, castShadow: false }, { geo: c.stems, mat: boleteStem, castShadow: false }]), 40);
+    const nAm = def('amanita', amanita.map((c) => [{ geo: c.caps, mat: amanitaCap, castShadow: false }, { geo: c.stems, mat: fungusStem, castShadow: false }]), 40, { fine: true });
+    const nBo = def('bolete', bolete.map((c) => [{ geo: c.caps, mat: boleteCap, castShadow: false }, { geo: c.stems, mat: boleteStem, castShadow: false }]), 40, { fine: true });
     const forestSpot = (R, minCanopy) => {
       for (let k = 0; k < 30; k++) {
         const [x, z] = ring(R, 6);
@@ -444,11 +452,18 @@ export class Flora {
 
     // ---- shoreline: reeds + cattails, pebbles, driftwood, lilies
     const reeds = [0, 1].map(() => reedClump(rnd, 18 + ((rnd() * 10) | 0), (rnd() * 4) | 0));
-    const nReed = def('reed', reeds.map((r) => [{ geo: r.blades, mat: reedMat, castShadow: true }, ...(r.heads ? [{ geo: r.heads, mat: cattailMat, castShadow: true }] : [])]), 110);
+    // reeds: full clump near, a sparse 6-blade clump (same silhouette colour) far away
+    const reedFar = [0, 1].map(() => reedClump(rnd, 6, 1));
+    const nReed = reeds.length;
+    reeds.forEach((r, v) => S.defineKind('reed' + v, [
+      { dist: 40, parts: [{ geo: r.blades, mat: reedMat, castShadow: true }, ...(r.heads ? [{ geo: r.heads, mat: cattailMat, castShadow: true }] : [])] },
+      { dist: 110, parts: [{ geo: reedFar[v].blades, mat: reedMat, castShadow: false }, { geo: reedFar[v].heads, mat: cattailMat, castShadow: false }] },
+    ], { cullDist: 110 }));
+    this.stats.reed = 0;
     const nPad = def('lilypad', [0].map(() => [{ geo: lilyPad(rnd), mat: padMat, castShadow: false }]), 90);
     const heart = new THREE.SphereGeometry(0.018, 8, 4); heart.scale(1, 0.6, 1); heart.translate(0, 0.035, 0);
     const nLily = def('lily', [[{ geo: lilyFlower(), mat: lilyMat, castShadow: false }, { geo: heart, mat: lilyHeart, castShadow: false }]], 70);
-    const nPeb = def('pebble', [0, 1].map(() => [{ geo: pebble(rnd), mat: pebbleMat, castShadow: false }]), 45);
+    const nPeb = def('pebble', [0].map(() => [{ geo: pebble(rnd), mat: pebbleMat, castShadow: false }]), 45, { fine: true });
     const nDrift = def('drift', [0, 1].map(() => [{ geo: driftwood(rnd), mat: driftMat, castShadow: true }]), 120);
     const L = WORLD.lake;
     const dockZone = (x, z) => x > -12 && x < -1 && z < -8 && z > -42;
@@ -494,12 +509,12 @@ export class Flora {
     }
     for (let i = 0; i < 26; i++) { const p = shore(-0.5, 2.5); if (p) { add('drift', nDrift, p[0], p[1], 0.8 + rnd() * 0.5, { align: 1, sink: 0.03, tilt: 0.08 }); this.world.colliders.add(p[0], p[1], 0.3, 'drift'); } }
 
-    S.build();
+    S.build(); F.build();
     // saplings went into the world scatter: World.build() calls its build() after this
     return this;
   }
 
   sample(name, x, y, z) { const a = this.samples[name] || (this.samples[name] = []); if (a.length < 40) a.push([+x.toFixed(1), +y.toFixed(2), +z.toFixed(1)]); }
 
-  update(camPos, lodBias = 1, frustum = null) { this.scatter.update(camPos, lodBias, frustum); }
+  update(camPos, lodBias = 1, frustum = null) { this.scatter.update(camPos, lodBias, frustum); this.fine.update(camPos, lodBias, frustum); }
 }

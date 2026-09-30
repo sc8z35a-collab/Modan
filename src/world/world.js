@@ -173,6 +173,10 @@ export class World {
       const gr = sp.getX(i) * c; sp.setX(i, sp.getX(i) - gr); sp.setY(i, sp.getY(i) + gr);
     }
     sp.needsUpdate = true;
+    // per-vertex canopy for the terrain shader (shade + needle-litter tint under crowns)
+    const ca = new Float32Array(pos.count);
+    for (let i = 0; i < pos.count; i++) ca[i] = this.canopyAt(pos.getX(i), pos.getZ(i));
+    geo.setAttribute('canopy', new THREE.BufferAttribute(ca, 1));
   }
 
   canopyAt(x, z) {
@@ -189,7 +193,8 @@ export class World {
     for (const pt of parts) {
       pt.castShadow = opts.castShadow ?? true;
       if (opts.wind) pt.mat = windify(pt.mat.clone(), this.U, opts.wind, true);
-      if (opts.alpha) { pt.mat.alphaTest = 0.5; pt.mat.alphaToCoverage = true; pt.mat.side = THREE.DoubleSide; }
+      // no alphaToCoverage: the composer target has no MSAA, A2C degraded to dithered dotted foliage
+      if (opts.alpha) { pt.mat.alphaTest = 0.5; pt.mat.alphaToCoverage = false; pt.mat.side = THREE.DoubleSide; }
       pt.mat.envMapIntensity = 0.7;
     }
     const lods = [{ dist: lodDists[0], parts }];
