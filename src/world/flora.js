@@ -388,6 +388,7 @@ export class Flora {
         const h = heightAt(x, z); if (h < 1) continue;
         const cov = coverageAt(x, z, h, 0), cn = canopy(x, z);
         if ((cov[1] < 0.35 && cn < minCanopy) || !clear(x, z, 0.3)) continue;
+        if (this.world.colliders.near(x, z, 0.15).length) continue; // not inside trunks / rocks
         return [x, z, cn];
       }
       return null;

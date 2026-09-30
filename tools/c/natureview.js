@@ -6,6 +6,7 @@ import { QUALITY } from '../../src/core/renderer.js';
 import { World, loadAssets } from '../../src/world/world.js';
 import { Grass } from '../../src/world/grass.js';
 import { Sky } from '../../src/world/sky.js';
+import { Water } from '../../src/world/water.js';
 import { heightAt, WORLD } from '../../src/world/heightfield.js';
 const q = new URLSearchParams(location.search);
 const W = +(q.get('w') || 900), H = +(q.get('h') || 500);
@@ -52,6 +53,12 @@ try {
   world.update(dt, cam, +(q.get('bias') || 1));
   grass?.update(dt, cam.position, new THREE.Vector3(1e4, 0, 1e4), night, world.U.uWind.value);
   if (q.has('fire')) { const l = new THREE.PointLight(0xff8a3a, 30, 16, 2); l.position.set(WORLD.camp.x, heightAt(WORLD.camp.x, WORLD.camp.z) + 0.6, WORLD.camp.z); scene.add(l); }
+  let water = null;
+  if (q.get('water') !== '0') {
+    water = new Water(r, scene, cam, world.worldData, 0.5); water.resize(W, H);
+    const fire = { intensity: 0, position: new THREE.Vector3(), glintColor: new THREE.Color(0, 0, 0) };
+    try { water.update(dt, sky, fire); water.renderReflection(grass ? grass.layers : []); } catch (e) { lg('water err', e.message); }
+  }
   lg('render');
   r.info.reset();
   r.render(scene, cam);
