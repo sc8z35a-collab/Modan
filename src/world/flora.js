@@ -315,8 +315,8 @@ function mushroomCluster(rnd, kind) {
 export class Flora {
   constructor(world) {
     this.world = world; this.U = world.U; this.q = world.q;
-    // own scatter with 96m chunks: ~20 small kinds x 64m chunks would have cost several hundred draw calls
-    this.scatter = new Scatter(world.scene, 96);
+    // own scatter with 128m chunks: ~20 small kinds x 64m chunks would have cost several hundred draw calls
+    this.scatter = new Scatter(world.scene, 128);
     this.stats = {}; this.samples = {}; // samples: a few positions per kind (QA viewer aims at them)
   }
 
@@ -390,11 +390,11 @@ export class Flora {
     // ---- forest floor: litter decals, cones, twigs, moss, mushrooms, saplings
     const nLitter = def('litter', [6, 7].map((idx) => [{ geo: decal(1.4, idx), mat: decalMat, castShadow: false }]), 55);
     const nCone = def('cone', [[{ geo: pineCone(), mat: coneMat, castShadow: false }]], 32);
-    const nTwig = def('twig', [0, 1].map(() => [{ geo: twigGeo(rnd), mat: twigMat, castShadow: true }]), 38);
+    const nTwig = def('twig', [0, 1].map(() => [{ geo: twigGeo(rnd), mat: twigMat, castShadow: false }]), 38);
     const nMoss = def('moss', [0].map(() => [{ geo: mossCushion(rnd), mat: mossMat, castShadow: false }]), 70);
     const amanita = [0].map(() => mushroomCluster(rnd, 'amanita')), bolete = [0].map(() => mushroomCluster(rnd, 'bolete'));
-    const nAm = def('amanita', amanita.map((c) => [{ geo: c.caps, mat: amanitaCap, castShadow: true }, { geo: c.stems, mat: fungusStem, castShadow: true }]), 40);
-    const nBo = def('bolete', bolete.map((c) => [{ geo: c.caps, mat: boleteCap, castShadow: true }, { geo: c.stems, mat: boleteStem, castShadow: true }]), 40);
+    const nAm = def('amanita', amanita.map((c) => [{ geo: c.caps, mat: amanitaCap, castShadow: false }, { geo: c.stems, mat: fungusStem, castShadow: false }]), 40);
+    const nBo = def('bolete', bolete.map((c) => [{ geo: c.caps, mat: boleteCap, castShadow: false }, { geo: c.stems, mat: boleteStem, castShadow: false }]), 40);
     const forestSpot = (R, minCanopy) => {
       for (let k = 0; k < 30; k++) {
         const [x, z] = ring(R, 6);

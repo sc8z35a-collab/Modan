@@ -83,7 +83,8 @@ export class World {
     onStep?.('岩と下草を配置中…');
     this.buildRocksAndPlants(models, textures);
     onStep?.('草花と林床を配置中…');
-    this.flora = new Flora(this).build();
+    // ?noflora (QA): A/B the cost of the lane-C ground detail
+    if (!(typeof location !== 'undefined' && /[?&]noflora/.test(location.search))) this.flora = new Flora(this).build();
     this.scatter.build();
   }
 
