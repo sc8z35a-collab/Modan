@@ -33,6 +33,10 @@ export function installLaneD(game) {
     if ((e.key === 'g' || e.key === 'G') && g.started && !g.photo && !e.repeat && !(e.target instanceof HTMLInputElement)) guide.toggle();
   });
 
+  // QA: ?day=N pins the in-game day (moon phase checks in snapshots: day 1 ~ gibbous, 3 ~ waning, 5 ~ new, 7 ~ crescent)
+  const qDay = +new URLSearchParams(location.search).get('day');
+  if (Number.isFinite(qDay) && qDay > 0 && g.state) g.state.day = qDay;
+
   const fwd = new THREE.Vector3(), toF = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), right = new THREE.Vector3();
   const env = { night: 0, sunDir: new THREE.Vector3(0, 1, 0), wind: null };
   const extra = { hours: 12, dusk: 0, firePan: 0 };
