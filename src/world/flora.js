@@ -15,7 +15,7 @@ import { mulberry32, createNoise2D, fbm, smoothstep } from '../core/noise.js';
 // ---------------------------------------------------------------- atlas (4 x 2 cells, 256px each)
 // 0 buttercup  1 oxeye daisy  2 harebell  3 fireweed  4 red clover  5 seed-head grass  6 needle litter  7 birch leaves
 const CELL = 256, COLS = 4, ROWS = 2;
-function paintAtlas() {
+export function paintAtlas() {
   const c = document.createElement('canvas'); c.width = CELL * COLS; c.height = CELL * ROWS;
   const g = c.getContext('2d');
   const rnd = mulberry32(3131);
@@ -305,7 +305,7 @@ export class Flora {
     this.world = world; this.U = world.U; this.q = world.q;
     // own scatter with 96m chunks: ~20 small kinds x 64m chunks would have cost several hundred draw calls
     this.scatter = new Scatter(world.scene, 96);
-    this.stats = {};
+    this.stats = {}; this.samples = {}; // samples: a few positions per kind (QA viewer aims at them)
   }
 
   build() {
@@ -349,25 +349,28 @@ export class Flora {
       ps.set(x, h - sink, z); sc.setScalar(s);
       m.compose(ps, qt, sc);
       S.add(name + ((rnd() * nVar) | 0), m, color);
-      this.stats[name]++;
+      this.stats[name]++; this.sample(name, x, h, z);
     };
     const C = WORLD.camp;
     const clear = (x, z, pad) => this.world.isCampClear(x, z, pad);
     const ring = (R, r0 = 0) => { const a = rnd() * Math.PI * 2, rr = r0 + Math.sqrt(rnd()) * (R - r0); return [C.x + Math.cos(a) * rr, C.z + Math.sin(a) * rr]; };
 
     // ---- meadow wildflowers (clustered patches, species by noise so each meadow has its own mix)
-    const nFlower = def('flower', [0, 1, 2, 3, 4].map((idx) => [{ geo: flowerCluster(rnd, idx, 5 + ((rnd() * 3) | 0), 0.6, idx === 3 ? 0.75 : 0.34), mat: cardMat, castShadow: false }]), 70);
-    const nSeed = def('seedgrass', [0].map(() => [{ geo: flowerCluster(rnd, 5, 5, 0.5, 0.55), mat: cardMat, castShadow: false }]), 60);
-    for (let i = 0, placed = 0; i < 40000 && placed < Math.round(2600 * gq); i++) {
+    const nFlower = def('flower', [0, 1, 2, 3, 4].map((idx) => [{ geo: flowerCluster(rnd, idx, 5 + ((rnd() * 3) | 0), 0.7, [0.62, 0.66, 0.5, 1.05, 0.42][idx]), mat: cardMat, castShadow: false }]), 70);
+    const nSeed = def('seedgrass', [0].map(() => [{ geo: flowerCluster(rnd, 5, 5, 0.5, 0.8), mat: cardMat, castShadow: false }]), 60);
+    for (let i = 0, placed = 0; i < 40000 && placed < Math.round(5200 * gq); i++) {
       const [x, z] = ring(150);
       const h = heightAt(x, z); if (h < 0.9) continue;
       const cov = coverageAt(x, z, h, 0);
       const patch = fbm(noise, x * 0.05, z * 0.05, 2);
       if (cov[0] < 0.45 || patch < 0.05 || canopy(x, z) > 0.4 || !clear(x, z, 1.5)) continue;
       // species by a second noise: yellow / white / violet / magenta / pink patches
-      const sp = Math.floor(((fbm(noise, x * 0.013 + 40, z * 0.013, 2) * 0.5 + 0.5) * 5 + rnd() * 1.3)) % 5;
+      // species: a dominant one per patch (noise) + 40% random mix; fireweed (tall) rare and only at forest edges
+      const dom = Math.floor(Math.abs(fbm(noise, x * 0.02 + 40, z * 0.02 - 13, 2)) * 997) % 5;
+      let sp = rnd() < 0.6 ? dom : (rnd() * 5) | 0;
+      if (sp === 3 && (cov[1] < 0.15 || rnd() < 0.6)) sp = [0, 1, 2, 4][(rnd() * 4) | 0];
       if (rnd() < 0.3) add('seedgrass', nSeed, x, z, 0.8 + rnd() * 0.5, { align: 0.3, sink: 0.02 });
-      else { S.add('flower' + sp, m.compose(ps.set(x, h - 0.02, z), qt.setFromAxisAngle(UP, rnd() * 6.28), sc.setScalar(0.8 + rnd() * 0.5))); this.stats.flower++; }
+      else { S.add('flower' + sp, m.compose(ps.set(x, h - 0.02, z), qt.setFromAxisAngle(UP, rnd() * 6.28), sc.setScalar(0.8 + rnd() * 0.5))); this.stats.flower++; this.sample('flower', x, h, z); }
       placed++;
     }
 
@@ -461,6 +464,8 @@ export class Flora {
     // saplings went into the world scatter: World.build() calls its build() after this
     return this;
   }
+
+  sample(name, x, y, z) { const a = this.samples[name] || (this.samples[name] = []); if (a.length < 40) a.push([+x.toFixed(1), +y.toFixed(2), +z.toFixed(1)]); }
 
   update(camPos, lodBias = 1, frustum = null) { this.scatter.update(camPos, lodBias, frustum); }
 }

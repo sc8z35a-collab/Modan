@@ -69,7 +69,10 @@ export class Grass {
           float dens = wd.g;
           float keep = step(aOff.z, dens) * fade;
           float nz = texture2D(tNoise, base*0.02).r;
-          float hgt = (0.28 + aOff.w*0.5 + nz*0.45) * uScale * mix(1.0, 0.55, wd.b) * keep;
+          // shorter on average with more patch variation (grazed/trampled lawns next to tall tussocks): the old 0.28-1.2m
+          // everywhere hid every flower and pebble at eye level
+          float tuss = smoothstep(0.35, 0.75, texture2D(tNoise, base*0.045 + 7.0).g);
+          float hgt = (0.16 + aOff.w*0.36 + nz*0.3 + tuss*0.35) * uScale * mix(1.0, 0.5, wd.b) * keep;
           float ang = aOff.z * 43.7;
           vec3 objectNormal = vec3(sin(ang), 0.0, cos(ang));
         `)

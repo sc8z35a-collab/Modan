@@ -11,6 +11,7 @@ const q = new URLSearchParams(location.search);
 const W = +(q.get('w') || 900), H = +(q.get('h') || 500);
 const t0 = performance.now(); const lg = (...a) => console.log('[nv]', ((performance.now() - t0) / 1000).toFixed(1) + 's', ...a);
 try {
+  if (q.has('atlas')) { const { paintAtlas } = await import('../../src/world/flora.js'); const t = paintAtlas(); const c = t.image; c.style.cssText = 'position:fixed;left:0;top:0;width:100%;background:#7a8a6a'; document.body.appendChild(c); document.title = 'READY'; throw 'atlas'; }
   const r = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true });
   r.setSize(W, H); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.AgXToneMapping; r.toneMappingExposure = +(q.get('exp') || 1.1);
   r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -30,6 +31,14 @@ try {
   let grass = null;
   if (q.get('grass') !== '0') grass = new Grass(scene, world.worldData, world.noiseTex, +(q.get('gd') || Q.grass));
   const parse = (s, d) => (s || d).split(',').map((v, i, a) => v);
+  // aim=kind[,i[,dist[,height]]]: look at sample i of a flora kind from `dist` metres
+  if (q.has('aim')) {
+    const [kind, ii = 0, dist = 2.2, hh = 1.2] = q.get('aim').split(',');
+    const smp = world.flora.samples[kind]; const p = smp[Math.min(+ii, smp.length - 1)];
+    const a = +(q.get('ang') || 0.7);
+    q.set('cam', `${p[0] + Math.cos(a) * dist},g+${hh},${p[2] + Math.sin(a) * dist}`); q.set('look', `${p[0]},g+0.15,${p[2]}`);
+    lg('aim', kind, p);
+  }
   const cp = parse(q.get('cam'), `${WORLD.camp.x + 10},g+1.6,${WORLD.camp.z + 10}`);
   const lp = parse(q.get('look'), `${WORLD.camp.x},g+1,${WORLD.camp.z}`);
   const Y = (x, z, s) => (String(s).startsWith('g') ? heightAt(x, z) + (+(String(s).slice(1)) || 0) : +s);
@@ -50,4 +59,4 @@ try {
   r.render(scene, cam);
   lg('done', JSON.stringify(window.__info));
   document.title = 'READY';
-} catch (e) { console.error('ERR', e?.stack || e); document.title = 'ERR'; }
+} catch (e) { if (e === 'atlas') {} else console.error('ERR', e?.stack || e); document.title = 'ERR'; }
