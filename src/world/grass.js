@@ -57,7 +57,7 @@ export class Grass {
           ${WORLD_DATA_GLSL}
           attribute vec4 aOff; uniform float uSize, uScale, uTime; uniform vec3 uCam, uPlayer; uniform vec2 uWind; uniform float uZoom;
           uniform sampler2D tNoise;
-          varying float vT; varying vec3 vTint; varying float vAO; varying vec3 vWP;
+          varying float vT; varying vec3 vTint; varying float vAO; varying vec3 vWP; varying float vX;
           mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
         `)
         .replace('#include <beginnormal_vertex>', `
@@ -99,10 +99,16 @@ export class Grass {
           float patchv = texture2D(tNoise, base*0.004).r;
           vTint = mix(mix(lush, fresh, aOff.w), dry, smoothstep(0.45, 0.8, patchv) * 0.8 + wd.b*0.3);
           vTint = mix(vTint, vTint*1.35 + vec3(0.03,0.03,0.0), t*t);
+          // ~6% of blades are dead straw (every real meadow has them), a few have reddish tips (autumn / stress)
+          float h2 = fract(aOff.z * 91.7 + aOff.w * 13.3);
+          vTint = mix(vTint, vec3(0.46, 0.40, 0.24) * (0.8 + aOff.w*0.4), step(h2, 0.06));
+          vTint = mix(vTint, vTint * vec3(1.25, 0.85, 0.7), step(0.94, h2) * t);
+          vX = position.x;
           vAO = mix(0.35, 1.0, t);
         `)
         .replace('#include <defaultnormal_vertex>', `
-          vec3 nrm = normalize(mix(objectNormal, vec3(0.0,1.0,0.0), 0.55));
+          vec3 side = vec3(cos(ang), 0.0, -sin(ang));
+          vec3 nrm = normalize(mix(objectNormal + side * position.x * 0.9, vec3(0.0,1.0,0.0), 0.5));
           vec3 transformedNormal = normalMatrix * nrm;
         `)
         .replace('#include <project_vertex>', `
@@ -112,8 +118,8 @@ export class Grass {
         .replace('#include <worldpos_vertex>', `vec4 worldPosition = vec4(transformed, 1.0);`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
-          varying float vT; varying vec3 vTint; varying float vAO; varying vec3 vWP; uniform float uNight;`)
-        .replace('#include <map_fragment>', `diffuseColor.rgb = vTint;`)
+          varying float vT; varying vec3 vTint; varying float vAO; varying vec3 vWP; varying float vX; uniform float uNight;`)
+        .replace('#include <map_fragment>', `diffuseColor.rgb = vTint * (0.9 + 0.18 * smoothstep(0.0, 0.5, abs(vX)) - 0.08 * (1.0 - smoothstep(0.0, 0.08, abs(vX))));`)
         .replace('#include <aomap_fragment>', `
           reflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(0.55, 1.0, vAO);
           // translucency toward light

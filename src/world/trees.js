@@ -402,7 +402,7 @@ export function createTreeKinds(textures, U, quality = 1) {
     const r = h * 0.22;
     const sticks0 = [];
     const fol0 = buildConifer(rnd, { h, cards: Math.round(260 * q), radius: r, droop: 0.45, cardLen: 2.2, dead: 10 + v * 3, sticks: sticks0 });
-    const fol1 = buildConifer(rnd, { h, cards: Math.round(150 * q * 0.8), radius: r, droop: 0.45, cardLen: 3.2 });
+    const fol1 = buildConifer(rnd, { h, cards: Math.round(150 * Math.max(q, 0.6) * 0.8), radius: r, droop: 0.45, cardLen: 3.2 }); // floor: 6 whorls read as sticks
     // far cone: ragged 12-sided silhouette (a perfect cone read as a "christmas tree" at 20x zoom)
     const cone = new THREE.ConeGeometry(r * 1.05, h * 0.84, 12, 6); cone.translate(0, h * 0.18 + h * 0.42, 0);
     { const cp = cone.attributes.position; for (let i = 0; i < cp.count; i++) { const a = Math.atan2(cp.getZ(i), cp.getX(i)), y = cp.getY(i); const k = 1 + 0.16 * Math.sin(a * 6 + y * 1.7) * Math.sin(y * 2.3); cp.setX(i, cp.getX(i) * k); cp.setZ(i, cp.getZ(i) * k); } cone.computeVertexNormals(); }
@@ -420,7 +420,7 @@ export function createTreeKinds(textures, U, quality = 1) {
     const h = 18 + v * 3;
     const sticks0 = [];
     const fol0 = buildConifer(rnd, { h, cards: Math.round(170 * q), crown: 0.45, radius: 3.2, droop: 0.15, cardLen: 2.6, dead: 8, sticks: sticks0 });
-    const fol1 = buildConifer(rnd, { h, cards: Math.round(170 * q * 0.6), crown: 0.45, radius: 3.2, droop: 0.15, cardLen: 3.6 });
+    const fol1 = buildConifer(rnd, { h, cards: Math.round(170 * Math.max(q, 0.6) * 0.6), crown: 0.45, radius: 3.2, droop: 0.15, cardLen: 3.6 });
     const blob = new THREE.IcosahedronGeometry(3, 1); blob.scale(1.05, 1.25, 1.05);
     { const bp = blob.attributes.position; for (let i = 0; i < bp.count; i++) { const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i); const k = 0.82 + 0.3 * Math.abs(Math.sin(x * 1.3 + z * 0.7) * Math.cos(y * 1.1)); bp.setXYZ(i, x * k, y * k * (y < 0 ? 0.6 : 1), z * k); } }
     blob.translate(0, h * 0.8, 0); blob.computeVertexNormals();

@@ -176,19 +176,25 @@ function decal(size, idx) {
   return uvCell(q, idx);
 }
 
-// pine cone: lathe with overlapping scale bumps (spiral phyllotaxis), ~150 tris
-function pineCone() {
-  const pts = [];
-  for (let i = 0; i <= 8; i++) { const t = i / 8; pts.push(new THREE.Vector2(Math.sin(t * Math.PI) * 0.024 * (1.15 - t * 0.5) + 0.002, t * 0.075)); }
-  const g = new THREE.LatheGeometry(pts, 10);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x);
-    const k = 1 + 0.28 * Math.max(0, Math.sin(a * 5 + y * 260));
-    p.setXYZ(i, x * k, y, z * k);
-  }
-  g.rotateZ(Math.PI / 2 - 0.25); g.translate(0.035, 0.018, 0); // lying on its side
-  g.computeVertexNormals();
+// spruce cone (~11cm, cylindrical, pointed) lying on its side: lathe with spiral overlapping scales. Three cones
+// per instance at random angles so the forest floor gets small scattered groups
+function pineCone(rnd) {
+  const one = () => {
+    const pts = [];
+    for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push(new THREE.Vector2(Math.pow(Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.5), 0.6) * 0.019 * (1.1 - t * 0.75) + 0.002, t * 0.11)); }
+    const g = new THREE.LatheGeometry(pts, 12);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x);
+      const k = 1 + 0.32 * Math.pow(Math.max(0, Math.sin(a * 6 + y * 190)), 3);
+      p.setXYZ(i, x * k, y, z * k);
+    }
+    g.rotateZ(Math.PI / 2 - 0.12); g.translate(0.055, 0.017, 0);
+    return g;
+  };
+  const parts = [];
+  for (let k = 0; k < 3; k++) { const g = one(); g.rotateY(rnd() * 6.28); g.translate((rnd() - 0.5) * 0.5, 0, (rnd() - 0.5) * 0.5); parts.push(g); }
+  const g = mergeGeometries(parts); g.computeVertexNormals();
   return g;
 }
 
@@ -204,15 +210,25 @@ function twigGeo(rnd) {
   return mergeGeometries(parts);
 }
 
-// moss cushion: squashed noisy hemisphere, sunk into the ground
+// moss cushion: lumpy low mound (several merged bumps), fine per-vertex fuzz; vertex colour: brighter tops,
+// dark brown-green where it meets the ground
 function mossCushion(rnd) {
-  const g = new THREE.IcosahedronGeometry(0.25, 2);
-  const p = g.attributes.position;
+  const parts = [];
+  for (let k = 0; k < 5; k++) {
+    const b = new THREE.IcosahedronGeometry(0.1 + rnd() * 0.1, 3);
+    b.scale(1, 0.45, 1); b.translate((rnd() - 0.5) * 0.3, -0.02, (rnd() - 0.5) * 0.3);
+    parts.push(b);
+  }
+  const g = mergeGeometries(parts);
+  const p = g.attributes.position, c = new Float32Array(p.count * 3);
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const k = 0.8 + 0.25 * Math.sin(x * 23 + z * 17) * Math.cos(y * 19);
-    p.setXYZ(i, x * k * 1.4, Math.max(y, -0.05) * k * 0.35, z * k * 1.4);
+    const f = 1 + 0.08 * Math.sin(x * 90 + z * 70) * Math.cos(z * 80 - y * 60);
+    p.setXYZ(i, x * f, Math.max(y * f, -0.04), z * f);
+    const top = Math.min(1, Math.max(0, (y + 0.02) / 0.09));
+    c[i * 3] = 0.45 + top * 0.55; c[i * 3 + 1] = 0.5 + top * 0.5; c[i * 3 + 2] = 0.4 + top * 0.3;
   }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
   g.computeVertexNormals();
   return g;
 }
@@ -315,8 +331,8 @@ function mushroomCluster(rnd, kind) {
 export class Flora {
   constructor(world) {
     this.world = world; this.U = world.U; this.q = world.q;
-    // own scatter with 96m chunks: ~20 small kinds x 64m chunks would have cost several hundred draw calls
-    this.scatter = new Scatter(world.scene, 96);
+    // own scatter with 128m chunks: ~20 small kinds x 64m chunks would have cost several hundred draw calls
+    this.scatter = new Scatter(world.scene, 128);
     this.stats = {}; this.samples = {}; // samples: a few positions per kind (QA viewer aims at them)
   }
 
@@ -331,9 +347,9 @@ export class Flora {
     // materials
     const cardMat = windify(new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75, alphaToCoverage: true }), U, 60, true);
     const decalMat = new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.35, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-    const coneMat = new THREE.MeshStandardMaterial({ color: 0x6a4428, roughness: 0.9 });
+    const coneMat = new THREE.MeshStandardMaterial({ color: 0x7a4e2c, roughness: 0.85 });
     const twigMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 1 });
-    const mossMat = new THREE.MeshStandardMaterial({ map: paintMossTex(), roughness: 1, color: 0xc8d8a8 });
+    const mossMat = new THREE.MeshStandardMaterial({ map: paintMossTex(), roughness: 1, color: 0xb0c090, vertexColors: true });
     const reedMat = windify(new THREE.MeshStandardMaterial({ color: 0x6f7f3a, side: THREE.DoubleSide, roughness: 0.7 }), U, 15, false);
     const cattailMat = windify(new THREE.MeshStandardMaterial({ color: 0x4a2c18, roughness: 0.95 }), U, 15, false);
     const padMat = new THREE.MeshStandardMaterial({ color: 0x3f6526, roughness: 0.3, side: THREE.DoubleSide, vertexColors: true });
@@ -389,12 +405,12 @@ export class Flora {
 
     // ---- forest floor: litter decals, cones, twigs, moss, mushrooms, saplings
     const nLitter = def('litter', [6, 7].map((idx) => [{ geo: decal(1.4, idx), mat: decalMat, castShadow: false }]), 55);
-    const nCone = def('cone', [[{ geo: pineCone(), mat: coneMat, castShadow: false }]], 32);
-    const nTwig = def('twig', [0, 1].map(() => [{ geo: twigGeo(rnd), mat: twigMat, castShadow: true }]), 38);
+    const nCone = def('cone', [[{ geo: pineCone(rnd), mat: coneMat, castShadow: false }]], 32);
+    const nTwig = def('twig', [0, 1].map(() => [{ geo: twigGeo(rnd), mat: twigMat, castShadow: false }]), 38);
     const nMoss = def('moss', [0].map(() => [{ geo: mossCushion(rnd), mat: mossMat, castShadow: false }]), 70);
     const amanita = [0].map(() => mushroomCluster(rnd, 'amanita')), bolete = [0].map(() => mushroomCluster(rnd, 'bolete'));
-    const nAm = def('amanita', amanita.map((c) => [{ geo: c.caps, mat: amanitaCap, castShadow: true }, { geo: c.stems, mat: fungusStem, castShadow: true }]), 40);
-    const nBo = def('bolete', bolete.map((c) => [{ geo: c.caps, mat: boleteCap, castShadow: true }, { geo: c.stems, mat: boleteStem, castShadow: true }]), 40);
+    const nAm = def('amanita', amanita.map((c) => [{ geo: c.caps, mat: amanitaCap, castShadow: false }, { geo: c.stems, mat: fungusStem, castShadow: false }]), 40);
+    const nBo = def('bolete', bolete.map((c) => [{ geo: c.caps, mat: boleteCap, castShadow: false }, { geo: c.stems, mat: boleteStem, castShadow: false }]), 40);
     const forestSpot = (R, minCanopy) => {
       for (let k = 0; k < 30; k++) {
         const [x, z] = ring(R, 6);
@@ -407,9 +423,9 @@ export class Flora {
       return null;
     };
     for (let i = 0; i < Math.round(1800 * gq); i++) { const p = forestSpot(110, 0.3); if (p) add('litter', nLitter, p[0], p[1], 0.7 + rnd() * 1.1, { align: 1, color: col.setHSL(0.08, 0.2, 0.55 + rnd() * 0.3) }); }
-    for (let i = 0; i < Math.round(2200 * gq); i++) { const p = forestSpot(90, 0.45); if (p) add('cone', nCone, p[0], p[1], 0.8 + rnd() * 0.5, { align: 1 }); }
+    for (let i = 0; i < Math.round(1100 * gq); i++) { const p = forestSpot(90, 0.45); if (p) add('cone', nCone, p[0], p[1], 0.8 + rnd() * 0.5, { align: 1 }); }
     for (let i = 0; i < Math.round(900 * gq); i++) { const p = forestSpot(90, 0.25); if (p) add('twig', nTwig, p[0], p[1], 0.7 + rnd() * 0.8, { align: 1, sink: 0.005 }); }
-    for (let i = 0; i < Math.round(700 * gq); i++) { const p = forestSpot(120, 0.5); if (p) add('moss', nMoss, p[0], p[1], 0.6 + rnd() * 1.6, { align: 1, sink: 0.02, color: col.setHSL(0.24 + rnd() * 0.05, 0.4, 0.4 + rnd() * 0.25) }); }
+    for (let i = 0; i < Math.round(900 * gq); i++) { const p = forestSpot(120, 0.5); if (p) add('moss', nMoss, p[0], p[1], 1.2 + rnd() * 2.2, { align: 1, sink: 0.03, color: col.setHSL(0.2 + rnd() * 0.07, 0.5, 0.75 + rnd() * 0.2) }); }
     for (let i = 0; i < 110; i++) { const p = forestSpot(100, 0.35); if (p) add(rnd() < 0.45 ? 'amanita' : 'bolete', 1, p[0], p[1], 0.8 + rnd() * 0.6, { align: 0.6 }); }
     // saplings: young spruces at forest edges / clearings (tiny instances of the real LOD'd tree kinds)
     this.stats.sapling = 0;

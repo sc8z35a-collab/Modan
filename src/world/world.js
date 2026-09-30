@@ -8,6 +8,7 @@ import { createTreeKinds, windify } from './trees.js';
 import { mulberry32, smoothstep } from '../core/noise.js';
 import { posHash } from './props.js';
 import { Flora } from './flora.js';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // resolve assets against the deploy base (works at / and at a sub-path like /Modan/)
 // VITE_ASSET_BASE lets the Pages build (tools/build-pages.mjs) load the big textures/models straight from
@@ -83,7 +84,8 @@ export class World {
     onStep?.('岩と下草を配置中…');
     this.buildRocksAndPlants(models, textures);
     onStep?.('草花と林床を配置中…');
-    this.flora = new Flora(this).build();
+    // ?noflora (QA): A/B the cost of the lane-C ground detail
+    if (!(typeof location !== 'undefined' && /[?&]noflora/.test(location.search))) this.flora = new Flora(this).build();
     this.scatter.build();
   }
 
@@ -267,22 +269,75 @@ export class World {
     for (let i = 0; i < 40; i++) spawnBranch();
     this.spawnBranch = spawnBranch;
 
-    // mushrooms (procedural, glowing slightly at night? no — realistic porcini/chanterelle)
-    const capMat = new THREE.MeshStandardMaterial({ color: 0x8a4a22, roughness: 0.55 });
-    const stemMat = new THREE.MeshStandardMaterial({ color: 0xe6dcc6, roughness: 0.8 });
+    // edible mushrooms you can pick: chanterelles (golden funnels with decurrent false gills) and porcini (fat
+    // club stem with net pattern, bun-shaped brown cap, pale pore layer). Deliberately NOT the red fly agaric of
+    // the decorative flora, so what you can eat is visually distinct from what you shouldn't.
+    // (each spawn builds its own geometry because interactions.js disposes them on pickup)
+    const chantMat = new THREE.MeshStandardMaterial({ color: 0xf0a42a, roughness: 0.55, vertexColors: true, side: THREE.DoubleSide });
+    const porciniCap = new THREE.MeshPhysicalMaterial({ color: 0x7a4722, roughness: 0.42, clearcoat: 0.25, clearcoatRoughness: 0.6 });
+    const porciniStem = new THREE.MeshStandardMaterial({ color: 0xe2d6bc, roughness: 0.85, vertexColors: true });
+    const porciniPores = new THREE.MeshStandardMaterial({ color: 0xd8d09a, roughness: 0.9 });
+    // soft-edged litter patch (needles + a little moss) under each cluster instead of a flat green disc
+    const bedTex = (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 128; const gx = c.getContext('2d');
+      for (let i = 0; i < 700; i++) {
+        const a = rnd() * 6.28, r = Math.sqrt(rnd()) * 60, x = 64 + Math.cos(a) * r, y = 64 + Math.sin(a) * r, b = rnd() * 6.28, l = 3 + rnd() * 7;
+        const alpha = (1 - r / 62) * (0.6 + rnd() * 0.4);
+        gx.strokeStyle = rnd() < 0.25 ? `rgba(70,95,35,${alpha})` : `rgba(${100 + rnd() * 50},${60 + rnd() * 25},${28},${alpha})`;
+        gx.lineWidth = 1.2; gx.beginPath(); gx.moveTo(x, y); gx.lineTo(x + Math.cos(b) * l, y + Math.sin(b) * l); gx.stroke();
+      }
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+    })();
+    const bedMat = new THREE.MeshStandardMaterial({ map: bedTex, transparent: true, depthWrite: false, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1 });
+    const chanterelle = (s) => {
+      // lathe profile: thin stem flaring into a wavy funnel cap
+      const pts = [];
+      // outer surface bottom->rim, then the upper surface curving DOWN into a depressed centre (true funnel)
+      for (let i = 0; i <= 12; i++) { const t = i / 12; pts.push(new THREE.Vector2(0.007 + Math.pow(t, 2.4) * 0.05 + t * 0.005, t * 0.072)); }
+      pts.push(new THREE.Vector2(0.064, 0.077), new THREE.Vector2(0.06, 0.08), new THREE.Vector2(0.045, 0.078), new THREE.Vector2(0.025, 0.07), new THREE.Vector2(0.008, 0.062), new THREE.Vector2(0.001, 0.06));
+      const g = mergeVertices(new THREE.LatheGeometry(pts, 28));
+      const p = g.attributes.position, c = new Float32Array(p.count * 3), ph = rnd() * 6.28;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x), r = Math.hypot(x, z);
+        const wave = 1 + 0.16 * Math.sin(a * 5 + ph) * Math.min(1, y / 0.07); // wavy, lobed rim
+        const ridge = y > 0.03 && y < 0.074 ? 1 - 0.18 * Math.max(0, Math.sin(a * 26)) : 1; // false gills underneath
+        p.setXYZ(i, x * wave, y + Math.sin(a * 3 + ph) * 0.006 * (r / 0.06), z * wave);
+        const k = ridge * (0.85 + 0.15 * (y / 0.08));
+        c[i * 3] = k; c[i * 3 + 1] = k * 0.95; c[i * 3 + 2] = k * 0.85;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+      g.scale(s, s, s); g.computeVertexNormals();
+      return new THREE.Mesh(g, chantMat);
+    };
+    const porcini = (s) => {
+      const o = new THREE.Group();
+      const sp = [];
+      for (let i = 0; i <= 8; i++) { const t = i / 8; sp.push(new THREE.Vector2(0.03 + Math.sin(t * Math.PI * 0.8) * 0.014 - t * 0.012, t * 0.085)); }
+      const sg = new THREE.LatheGeometry(sp, 14);
+      const p = sg.attributes.position, c = new Float32Array(p.count * 3);
+      for (let i = 0; i < p.count; i++) { const a = Math.atan2(p.getZ(i), p.getX(i)), y = p.getY(i); const net = 0.88 + 0.12 * Math.abs(Math.sin(a * 11) * Math.sin(y * 260)); c[i * 3] = net; c[i * 3 + 1] = net * 0.97; c[i * 3 + 2] = net * 0.9; }
+      sg.setAttribute('color', new THREE.BufferAttribute(c, 3)); sg.scale(s, s, s); sg.computeVertexNormals();
+      const cap = new THREE.SphereGeometry(0.058 * s, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.52); cap.scale(1, 0.62, 1);
+      const cp = cap.attributes.position; for (let i = 0; i < cp.count; i++) { const a = Math.atan2(cp.getZ(i), cp.getX(i)); const k = 1 + 0.04 * Math.sin(a * 3 + s * 7); cp.setX(i, cp.getX(i) * k); cp.setZ(i, cp.getZ(i) * k); }
+      cap.computeVertexNormals(); cap.translate(0, 0.078 * s, 0);
+      const pores = new THREE.CircleGeometry(0.056 * s, 18); pores.rotateX(Math.PI / 2); pores.translate(0, 0.079 * s, 0);
+      o.add(new THREE.Mesh(sg, porciniStem), new THREE.Mesh(cap, porciniCap), new THREE.Mesh(pores, porciniPores));
+      return o;
+    };
     const mushroomGeo = () => {
       const g = new THREE.Group();
-      for (let i = 0; i < 3; i++) {
-        const s = 0.6 + rnd() * 0.6;
-        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.025 * s, 0.035 * s, 0.1 * s, 10), stemMat);
-        stem.position.y = 0.05 * s;
-        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.07 * s, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
-        cap.scale.y = 0.6; cap.position.y = 0.095 * s;
-        const o = new THREE.Group(); o.add(stem, cap); o.position.set((rnd() - 0.5) * 0.2, 0, (rnd() - 0.5) * 0.2);
-        o.rotation.z = (rnd() - 0.5) * 0.3;
-        stem.castShadow = cap.castShadow = true;
+      const isChant = rnd() < 0.55, n = isChant ? 3 + ((rnd() * 4) | 0) : 1 + ((rnd() * 3) | 0);
+      for (let i = 0; i < n; i++) {
+        const s = (isChant ? 0.7 : 0.75) + rnd() * 0.6;
+        const o = isChant ? chanterelle(s) : porcini(s);
+        o.position.set((rnd() - 0.5) * 0.24, -0.004, (rnd() - 0.5) * 0.24);
+        o.rotation.set((rnd() - 0.5) * 0.25, rnd() * 6.28, (rnd() - 0.5) * 0.25);
+        o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
         g.add(o);
       }
+      // a few fallen needles / moss under the cluster so it sits in the litter instead of on it
+      const bed = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), bedMat);
+      bed.rotation.x = -Math.PI / 2; bed.position.y = 0.006; bed.receiveShadow = true; g.add(bed);
       return g;
     };
     const spawnMushroom = () => {
@@ -291,7 +346,9 @@ export class World {
         const x = WORLD.camp.x + Math.cos(a) * rr, z = WORLD.camp.z + Math.sin(a) * rr;
         const h = heightAt(x, z);
         if (h < 1 || coverageAt(x, z, h, 0)[1] < 0.5 || !this.isCampClear(x, z, 0)) continue;
+        if (this.colliders.near(x, z, 0.25).length) continue; // spawned inside tree trunks / boulders
         const g = mushroomGeo(); g.position.set(x, h, z);
+        const n = normalAt(x, z); g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(n[0], n[1], n[2])); // follow the slope
         this.scene.add(g);
         this.pickups.push({ type: 'mushroom', obj: g, pos: g.position, label: 'キノコを採る', radius: 1.6 });
         return;
