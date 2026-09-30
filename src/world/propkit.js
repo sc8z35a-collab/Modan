@@ -175,7 +175,8 @@ export function loft(path, rf, seg = 24, rad = 16, caps = true) {
       uv.push(j / rad, t);
     }
   }
-  for (let i = 0; i < seg; i++) for (let j = 0; j < rad; j++) { const a = i * (rad + 1) + j, b = a + rad + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+  // winding: (along T) x (around N->B) = -N was inward -> sides rendered inside-out (black handles/roots)
+  for (let i = 0; i < seg; i++) for (let j = 0; j < rad; j++) { const a = i * (rad + 1) + j, b = a + rad + 1; idx.push(a, a + 1, b, a + 1, b + 1, b); }
   if (caps) for (const [i, flip] of [[0, true], [seg, false]]) {
     curve.getPointAt(i / seg, P); const c = pos.length / 3; pos.push(P.x, P.y, P.z); uv.push(0.5, 0.5);
     for (let j = 0; j < rad; j++) { const a = i * (rad + 1) + j; if (flip) idx.push(c, a + 1, a); else idx.push(c, a, a + 1); }
