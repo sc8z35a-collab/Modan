@@ -69,6 +69,8 @@ export class Batch {
    */
   add(geo, mat, m = null, color = 0xffffff, opt = {}) {
     const g = Batch.norm(geo);
+    // shade()/face() see assembly-space coords (after m) unless opt.local (geometry's own space)
+    if (m && !opt.local) Batch.xform(g, m);
     const pos = g.attributes.position, nor = g.attributes.normal, n = pos.count;
     const hasCol = !!g.attributes.color && color === null;
     const col = hasCol ? g.attributes.color.array : new Float32Array(n * 3);
@@ -81,43 +83,47 @@ export class Batch {
     }
     if (!hasCol) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     g.setAttribute('aSway', new THREE.Float32BufferAttribute(sway, 1));
-    // per-face split into other materials
-    if (opt.face) {
-      const buckets = new Map(); // mat -> [triIndex, color|null]
-      for (let t = 0; t < n / 3; t++) {
-        _va.fromBufferAttribute(pos, t * 3); _vb.fromBufferAttribute(pos, t * 3 + 1); _vc.fromBufferAttribute(pos, t * 3 + 2);
-        _cen.copy(_va).add(_vb).add(_vc).divideScalar(3);
-        _n.subVectors(_vc, _vb).cross(_va.sub(_vb)).normalize();
-        let r = opt.face(_cen, _n); if (r && r.isMaterial) r = { mat: r };
-        const mm = r?.mat || mat;
-        if (!buckets.has(mm)) buckets.set(mm, []);
-        buckets.get(mm).push(t, r?.color ?? null);
-      }
-      for (const [mm, list] of buckets) {
-        const cnt = list.length / 2, sub = new THREE.BufferGeometry();
-        for (const k of KEEP) {
-          const src = g.attributes[k], sz = src.itemSize, arr = new Float32Array(cnt * 3 * sz);
-          for (let j = 0; j < cnt; j++) arr.set(src.array.subarray(list[j * 2] * 3 * sz, list[j * 2] * 3 * sz + 3 * sz), j * 3 * sz);
-          sub.setAttribute(k, new THREE.BufferAttribute(arr, sz));
-        }
-        for (let j = 0; j < cnt; j++) {
-          const c = list[j * 2 + 1]; if (c === null) continue;
-          _c.set(c); const a = sub.attributes.color.array; // replace the colour, keep the shade() variation ratio
-          for (let v = 0; v < 3; v++) { const o = (j * 3 + v) * 3; a[o] = a[o] / Math.max(base.r, 1e-3) * _c.r; a[o + 1] = a[o + 1] / Math.max(base.g, 1e-3) * _c.g; a[o + 2] = a[o + 2] / Math.max(base.b, 1e-3) * _c.b; }
-        }
-        this._push(sub, mm, m);
-      }
-      return this;
+    const late = m && opt.local ? m : null;
+    if (!opt.face) { if (late) Batch.xform(g, late); this._push(g, mat); return this; }
+    // per-face split into other materials / colours
+    const buckets = new Map(); // mat -> [triIndex, color|null, ...]
+    for (let t = 0; t < n / 3; t++) {
+      _va.fromBufferAttribute(pos, t * 3); _vb.fromBufferAttribute(pos, t * 3 + 1); _vc.fromBufferAttribute(pos, t * 3 + 2);
+      _cen.copy(_va).add(_vb).add(_vc).divideScalar(3);
+      _n.subVectors(_vc, _vb).cross(_va.sub(_vb)).normalize();
+      let r = opt.face(_cen, _n); if (r && r.isMaterial) r = { mat: r };
+      const mm = r?.mat || mat;
+      if (!buckets.has(mm)) buckets.set(mm, []);
+      buckets.get(mm).push(t, r?.color ?? null);
     }
-    this._push(g, mat, m);
+    for (const [mm, list] of buckets) {
+      const cnt = list.length / 2, sub = new THREE.BufferGeometry();
+      for (const k of KEEP) {
+        const src = g.attributes[k], sz = src.itemSize, arr = new Float32Array(cnt * 3 * sz);
+        for (let j = 0; j < cnt; j++) arr.set(src.array.subarray(list[j * 2] * 3 * sz, list[j * 2] * 3 * sz + 3 * sz), j * 3 * sz);
+        sub.setAttribute(k, new THREE.BufferAttribute(arr, sz));
+      }
+      for (let j = 0; j < cnt; j++) {
+        const c = list[j * 2 + 1]; if (c === null) continue;
+        _c.set(c); const a = sub.attributes.color.array; // replace the colour, keep the shade() variation ratio
+        for (let v = 0; v < 3; v++) { const o = (j * 3 + v) * 3; a[o] = a[o] / Math.max(base.r, 1e-3) * _c.r; a[o + 1] = a[o + 1] / Math.max(base.g, 1e-3) * _c.g; a[o + 2] = a[o + 2] / Math.max(base.b, 1e-3) * _c.b; }
+      }
+      if (late) Batch.xform(sub, late);
+      this._push(sub, mm);
+    }
+    g.dispose();
     return this;
   }
-  _push(g, mat, m) {
-    const M = m ? this.frame.clone().multiply(m) : this.frame;
+  // apply a matrix to a non-indexed geometry; mirrored matrices flip the winding so faces stay front-facing
+  static xform(g, M) {
     g.applyMatrix4(M);
-    if (M.determinant() < 0) { // mirrored -> flip winding
-      const p = g.attributes; for (const k of KEEP) { const a = p[k].array, s = p[k].itemSize; for (let t = 0; t < a.length; t += 3 * s) for (let j = 0; j < s; j++) { const x = a[t + s + j]; a[t + s + j] = a[t + 2 * s + j]; a[t + 2 * s + j] = x; } }
+    if (M.determinant() < 0) {
+      for (const k of KEEP) { const at = g.attributes[k]; if (!at) continue; const a = at.array, s = at.itemSize; for (let t = 0; t < a.length; t += 3 * s) for (let j = 0; j < s; j++) { const x = a[t + s + j]; a[t + s + j] = a[t + 2 * s + j]; a[t + 2 * s + j] = x; } }
     }
+    return g;
+  }
+  _push(g, mat) {
+    Batch.xform(g, this.frame);
     if (!this.groups.has(mat)) this.groups.set(mat, []);
     this.groups.get(mat).push(g); this.tris += g.attributes.position.count / 3;
   }
