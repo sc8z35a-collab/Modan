@@ -64,6 +64,7 @@ export class FieldGuide {
     this.isOpen = false;
     this.cat = 'all';
     this.data = this.load();
+    this.fresh = new Set(this.data.fresh);
     this.meta = {};
     this.metaP = fetch(`${BASE}assets/photos/photos.json`).then((r) => (r.ok ? r.json() : {})).then((m) => { this.meta = m || {}; }).catch(() => {});
     this.build();
@@ -84,10 +85,14 @@ export class FieldGuide {
   load() {
     try {
       const d = JSON.parse(localStorage.getItem(KEY) || '{}');
-      return { seen: (d && typeof d.seen === 'object' && d.seen) || {}, best: (d && typeof d.best === 'object' && d.best) || {} };
-    } catch { return { seen: {}, best: {} }; }
+      const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+      return { seen: obj(d?.seen), best: obj(d?.best), fresh: Array.isArray(d?.fresh) ? d.fresh.filter((x) => typeof x === 'string') : [] };
+    } catch { return { seen: {}, best: {}, fresh: [] }; }
   }
-  save() { try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch { /* storage disabled */ } }
+  save() {
+    this.data.fresh = [...(this.fresh || [])];
+    try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch { /* storage disabled */ }
+  }
 
   get count() { return GUIDE.filter((e) => this.data.seen[e.id]).length; }
 
@@ -126,7 +131,8 @@ export class FieldGuide {
     const list = GUIDE.filter((e) => this.cat === 'all' || e.cat === this.cat);
     this.grid.innerHTML = list.map((e) => {
       const seen = !!this.data.seen[e.id];
-      return `<button class="fg-card ${seen ? 'seen' : 'locked'}" data-id="${e.id}">
+      const isNew = seen && this.fresh?.has(e.id);
+      return `<button class="fg-card ${seen ? 'seen' : 'locked'}${isNew ? ' new' : ''}" data-id="${e.id}">
         <div class="fg-ph">${seen ? `<img loading="lazy" decoding="async" alt="${esc(e.name)}" src="${this.photoUrl(e.id)}">` : '<span>?</span>'}</div>
         <div class="fg-nm">${seen ? esc(e.name) : '？？？'}</div>
         <div class="fg-best">${seen && this.data.best[e.id] ? `最大 ${this.data.best[e.id]}cm` : ''}</div>
@@ -138,7 +144,8 @@ export class FieldGuide {
   showDetail(id) {
     const e = GUIDE.find((x) => x.id === id); if (!e) return;
     const seen = !!this.data.seen[id];
-    this.g?.audio?.click?.();
+    if (this.fresh.delete(id)) { this.save(); this.badge(); this.render(); }
+    this.page();
     if (!seen) {
       this.detail.innerHTML = `<div class="fg-d-in locked"><div class="fg-d-ph"><span>?</span></div><div class="fg-d-tx">
         <h3>まだ見つけていない</h3><p class="fg-hint">ヒント：${esc(e.hint)}</p><button class="fg-back">もどる</button></div></div>`;
@@ -155,11 +162,23 @@ export class FieldGuide {
     this.detail.classList.remove('hidden');
     this.detail.querySelector('.fg-back').onclick = () => this.hideDetail();
   }
+  // unseen-discoveries badge on the HUD 📖 button (created by laned.js)
+  badge() {
+    const b = document.getElementById('btnGuide'); if (!b) return;
+    const n = this.fresh?.size || 0;
+    b.dataset.badge = n ? String(n) : '';
+    b.classList.toggle('fg-has-new', n > 0);
+  }
+
   hideDetail() { this.detail.classList.add('hidden'); this.detail.innerHTML = ''; }
+
+  // soft paper rustle (band-passed noise sweep) for opening / turning pages
+  page() { const a = this.g?.audio; if (a?.enabled) { a.burst(2600, 0.7, 0.07, 0.16, 'bandpass', 0, 0.1); setTimeout(() => a.burst(1500, 0.8, 0.05, 0.12, 'bandpass', 0, 0.1), 70); } }
 
   open() {
     if (this.isOpen) return;
     this.isOpen = true;
+    this.page();
     this.hideDetail(); this.render();
     this.root.classList.remove('hidden');
     // pause like the menu does (restore the previous state on close so opening it from the menu keeps the menu paused)
@@ -222,7 +241,13 @@ export class FieldGuide {
     if (!e || this.data.seen[id]) return false;
     this.data.seen[id] = Date.now();
     this.save();
-    if (!quiet) this.g?.ui?.toast?.(`📖 図鑑に「${e.name}」が追加された (${this.count}/${GUIDE.length})`);
+    if (!quiet) {
+      this.g?.ui?.toast?.(`📖 図鑑に「${e.name}」が追加された (${this.count}/${GUIDE.length})`);
+      this.fresh.add(id); this.save(); // "NEW" stamp until the card is looked at (persisted)
+      this.badge();
+      const a = this.g?.audio; if (a?.enabled) { a.tone(880, 0.12, 0.05, 'triangle', 1.2, 0, 0.4); setTimeout(() => a.tone(1320, 0.25, 0.05, 'triangle', 1, 0, 0.5), 110); }
+      if (this.count === GUIDE.length) setTimeout(() => this.g?.ui?.toast?.('🏅 図鑑コンプリート！湖畔の森のすべてを見つけた'), 1800);
+    }
     if (this.isOpen) this.render();
     return true;
   }

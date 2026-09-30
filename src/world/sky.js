@@ -238,7 +238,10 @@ export class Sky {
     this.dayCount = 0; this._lastHours = null;
   }
 
-  setDay(day) { if (Number.isFinite(day)) this.dayCount = day; }
+  // once the game pins the day (laned.js does it every frame from GameState.day) the internal wrap counter is
+  // disabled: counting BOTH the hour wrap and state.day++ advanced the moon by a whole extra day on every
+  // midnight / sleep (tools/d/sky.test.mjs)
+  setDay(day) { if (Number.isFinite(day)) { this.dayCount = day; this._dayPinned = true; } }
 
   setShadowMapSize(size) {
     this.sun.shadow.mapSize.set(size, size);
@@ -263,8 +266,11 @@ export class Sky {
       groundNight: new THREE.Color(0.018, 0.022, 0.035), fogNight: new THREE.Color(0.016, 0.024, 0.04),
     });
     this.uniforms.uTime.value += dt;
-    if (this._lastHours !== null && hours < this._lastHours - 12) this.dayCount++;
-    else if (this._lastHours !== null && hours > this._lastHours + 12) this.dayCount = Math.max(0, this.dayCount - 1);
+    if (!Number.isFinite(hours)) hours = this._lastHours ?? 12; // NaN hours poisoned the phase + every light
+    if (!this._dayPinned && this._lastHours !== null) {
+      if (hours < this._lastHours - 12) this.dayCount++;
+      else if (hours > this._lastHours + 12) this.dayCount = Math.max(0, this.dayCount - 1);
+    }
     this._lastHours = hours;
     // start (day 1, the first night) near a waxing gibbous moon, reach full moon on the 2nd night
     const phase = (((this.dayCount + hours / 24) / this.LUNAR_DAYS + 0.36) % 1 + 1) % 1;

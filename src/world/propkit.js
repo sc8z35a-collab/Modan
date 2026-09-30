@@ -78,7 +78,8 @@ export class Batch {
     const base = _c2.set(color ?? 0xffffff);
     for (let i = 0; i < n; i++) {
       _va.fromBufferAttribute(pos, i);
-      if (!hasCol) { _c.copy(base); if (opt.shade) { _n.fromBufferAttribute(nor, i); opt.shade(_va, _n, _c); } col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b; }
+      // clamp: shade() noise could go negative (-0.008 on the ash) which blew up in the HDR/bloom chain
+      if (!hasCol) { _c.copy(base); if (opt.shade) { _n.fromBufferAttribute(nor, i); opt.shade(_va, _n, _c); } col[i * 3] = Math.max(0, _c.r); col[i * 3 + 1] = Math.max(0, _c.g); col[i * 3 + 2] = Math.max(0, _c.b); }
       if (opt.sway) sway[i] = opt.sway(_va);
     }
     if (!hasCol) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
@@ -127,6 +128,8 @@ export class Batch {
     if (!this.groups.has(mat)) this.groups.set(mat, []);
     this.groups.get(mat).push(g); this.tris += g.attributes.position.count / 3;
   }
+  // snapshot of vertex counts per material (for drawRange-based progressive reveal of merged parts)
+  mark() { const m = new Map(); for (const [mat, list] of this.groups) m.set(mat, list.reduce((a, g) => a + g.attributes.position.count, 0)); return m; }
   // merge -> meshes added to parent. opts per material via mat.userData: {noShadow, renderOrder}
   build(parent, name = 'batch') {
     const out = [];
@@ -331,7 +334,13 @@ export function kitTextures() {
 // shared materials (vertex coloured, one draw call per material after batching)
 let _mats = null;
 export function kitMaterials(textures) {
-  if (_mats) return _mats;
+  if (_mats) {
+    // first caller may have had no textures (buildChair/buildLantern): upgrade the cached bark later instead of
+    // keeping the plain-grain fallback forever
+    const bk = textures?.bark_brown_02;
+    if (bk?.diff && _mats.bark.map !== bk.diff) { _mats.bark.map = bk.diff; _mats.bark.normalMap = bk.nor || null; _mats.bark.needsUpdate = true; }
+    return _mats;
+  }
   const t = kitTextures();
   const bk = textures?.bark_brown_02;
   const mats = {

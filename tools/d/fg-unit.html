@@ -35,3 +35,17 @@ localStorage.setItem('modan-fieldguide', '{"seen":null,"best":5}'); const fg4 = 
 localStorage.setItem('modan-fieldguide', '[1,2]'); const fg5 = new FieldGuide(g); ok(fg5.unlock('loon', true) === true, 'array storage tolerated');
 document.getElementById('o').textContent = out.join('\n'); window.__res = out;
 </script>
+<script type="module">
+import { FieldGuide } from '/src/ui/fieldguide.js';
+await new Promise((r) => setTimeout(r, 300));
+localStorage.clear(); const o = []; const ok = (c, m) => o.push((c ? 'PASS ' : 'FAIL ') + m);
+const btn = document.createElement('button'); btn.id = 'btnGuide'; document.body.appendChild(btn);
+const g = { ui: { toast() {}, showCatch() {} }, input: { reset() {} }, state: { inv: {} } };
+const a = new FieldGuide(g); a.unlock('loon'); a.unlock('owl');
+ok(btn.dataset.badge === '2' && btn.classList.contains('fg-has-new'), 'badge counts 2 new');
+const b = new FieldGuide(g); ok(b.fresh.has('loon') && b.fresh.has('owl'), 'NEW persisted across reload');
+b.open(); ok(b.grid.querySelectorAll('.fg-card.new').length === 2, 'NEW stamp rendered');
+b.showDetail('loon'); ok(!b.fresh.has('loon') && btn.dataset.badge === '1', 'viewing clears one');
+b.close(); ok(new FieldGuide(g).fresh.size === 1, 'cleared state persisted');
+window.__res2 = o;
+</script>

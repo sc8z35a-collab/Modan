@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { heightAt } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
+import { addAxe } from './campdetail.js';
 import { Batch, T, kitMaterials, kitTextures, rbox, box, cyl, tube, loft, sphere, torus, lathe, ribbon, pie, pieFace, jitter, smoothNormals } from './propkit.js';
 
 // deterministic 0..1 hash of a position (identical for coincident vertices of non-indexed geometry)
@@ -230,6 +231,9 @@ export function buildFireRing(textures) {
   // ash bed: domed disc, light grey centre -> black charcoal edge, conformed later by settle (flat ring area)
   const ash = new THREE.CircleGeometry(0.62, 40, 0, Math.PI * 2); ash.rotateX(-Math.PI / 2);
   { const p = ash.attributes.position; for (let i = 0; i < p.count; i++) { const r = Math.hypot(p.getX(i), p.getZ(i)); p.setY(i, 0.02 + 0.035 * (1 - (r / 0.62) ** 2) + (posHash(p.getX(i), 0, p.getZ(i), 4) - 0.5) * 0.01); } ash.computeVertexNormals(); }
+  // (CircleGeometry's centre vertex is shared by every fan triangle: its normal is fine, but the disc was lit as
+  // if facing down near the rim because computeVertexNormals on the indexed fan -> force +Y-ish normals)
+  { const n = ash.attributes.normal; for (let i = 0; i < n.count; i++) if (n.getY(i) < 0.3) n.setXYZ(i, n.getX(i) * 0.3, 1, n.getZ(i) * 0.3); }
   B.add(ash, ashMat, null, 0xffffff, { shade: (q, n, c) => { const r = Math.hypot(q.x, q.z) / 0.62; const v = 0.13 - 0.11 * r + (posHash(q.x * 3, 1, q.z * 3, 2) - 0.5) * 0.06; /* linear vertex colour: 0.13 ~ sRGB 100 grey ash */ c.setRGB(v, v * 0.97, v * 0.94); } });
   // charcoal chunks + white-ashed ember ends + scorched ground ring
   for (let i = 0; i < 38; i++) {
@@ -244,7 +248,7 @@ export function buildFireRing(textures) {
   return g;
 }
 
-// firewood logs placed in the fire (visible count depends on fuel)
+// firewood logs placed in the fire (visible count follows the fuel: userData.setFuel)
 export function buildFireLogs(textures) {
   // teepee of 5 split logs + kindling. Bark logs and charred logs; charred ones carry the glow material so
   // main.js can drive userData.charred.emissiveIntensity. Glow is masked by an ember crack texture and fades
@@ -259,17 +263,30 @@ export function buildFireLogs(textures) {
   const charred = new THREE.MeshStandardMaterial({ name: 'charred', vertexColors: true, color: 0xffffff, map: kitTextures().grunge, roughness: 1, emissive: 0xff3300, emissiveMap: embers, emissiveIntensity: 0 });
   g.userData.charred = charred;
   const rnd = mulberry32(6);
-  for (let i = 0; i < 5; i++) {
+  // kindling first (always shown while there is fuel), then the logs one by one: marks[k] = vertex counts with
+  // k logs, so setFuel() can reveal logs with drawRange on the merged meshes (no extra draw calls)
+  for (let i = 0; i < 9; i++) { const a = rnd() * 6.28; B.add(cyl(0.008, 0.01, 0.35, 5), charred, T(Math.cos(a) * 0.06, 0.16, Math.sin(a) * 0.06, 0, -a, 0).multiply(T(0, 0, 0, 0, 0, 0.7 + rnd() * 0.3)), 0x1a1614); }
+  const marks = [B.mark()];
+  const order = [0, 3, 1, 4, 2]; // alternate sides so a half-fed fire still looks like a teepee
+  for (const i of order) {
     const a = (i / 5) * Math.PI * 2 + (rnd() - 0.5) * 0.3, len = 0.72 + rnd() * 0.12;
     const r = 0.055 + rnd() * 0.02, full = i % 2 === 1;
     const geo = full ? cyl(r * 0.92, r, len, 10, 4) : pie(r * 1.25, len, Math.PI * (0.55 + rnd() * 0.3), rnd() * 6, 5, i).rotateX(Math.PI / 2);
     const m = T(Math.cos(a) * 0.19, 0.27, Math.sin(a) * 0.19, 0, -a, 0).multiply(T(0, 0, 0, 0, 0, 0.95));
     if (full) B.add(geo, bark, m, 0xc8bcb0, { shade: (q, n, c) => { if (q.y < 0.3) c.multiplyScalar(0.25 + q.y * 2); } });
     else B.add(geo, charred, m, 0x2a2420, { local: true, shade: (q, n, c) => { const t = (q.y / len) + 0.5; c.multiplyScalar(t > 0.75 ? 1.8 : 1); } });
+    marks.push(B.mark());
   }
-  // kindling sticks in the middle
-  for (let i = 0; i < 9; i++) { const a = rnd() * 6.28; B.add(cyl(0.008, 0.01, 0.35, 5), charred, T(Math.cos(a) * 0.06, 0.16, Math.sin(a) * 0.06, 0, -a, 0).multiply(T(0, 0, 0, 0, 0, 0.7 + rnd() * 0.3)), 0x1a1614); }
-  B.build(g, 'firelogs');
+  const meshes = B.build(g, 'firelogs');
+  // setFuel(f): fuel 0..1.2 -> 1..5 logs (a full load = 5 logs = 1.0). Called by main.js every frame (cheap: only
+  // touches drawRange when the count changes).
+  let shown = -1;
+  g.userData.setFuel = (f) => {
+    const k = Math.max(0, Math.min(5, Math.ceil(f / 0.2 - 1e-6)));
+    if (k === shown) return; shown = k;
+    for (const ms of meshes) ms.geometry.setDrawRange(0, marks[k].get(ms.material) ?? 0);
+  };
+  g.userData.setFuel(1.2);
   return g;
 }
 
@@ -432,8 +449,11 @@ export function buildTripod() {
   }
   B.add(torus(0.025, 0.008, 6, 14), M.iron, T(0, 1.3, 0, Math.PI / 2, 0, 0), iron);
   // chain links from ring to grate
-  for (let i = 0; i < 17; i++) B.add(torus(0.012, 0.0025, 4, 10), M.iron, T(0, 1.27 - i * 0.026, 0, 0, i % 2 ? Math.PI / 2 : 0, 0, 1, 1.6, 1), iron);
-  for (let i = 0; i < 3; i++) { const a = i / 3 * 6.28; B.add(cyl(0.002, 0.002, 0.36, 4), M.iron, T(Math.cos(a) * 0.14, 0.97, Math.sin(a) * 0.14, Math.sin(a) * 0.39, 0, -Math.cos(a) * 0.39), iron); }
+  // short chain ending in a ring where the grate's 3 suspension wires meet (y=1.14). It used to run down to
+  // y=0.85 straight through the kettle standing on the grate (kettle bail top ~1.07).
+  for (let i = 0; i < 5; i++) B.add(torus(0.012, 0.0025, 4, 10), M.iron, T(0, 1.27 - i * 0.026, 0, 0, i % 2 ? Math.PI / 2 : 0, 0, 1, 1.6, 1), iron);
+  B.add(torus(0.014, 0.003, 5, 12), M.iron, T(0, 1.14, 0, Math.PI / 2, 0, 0), iron);
+  for (let i = 0; i < 3; i++) { const a = i / 3 * 6.28, lo = new THREE.Vector3(Math.cos(a) * 0.27, 0.805, Math.sin(a) * 0.27), hi = new THREE.Vector3(Math.cos(a) * 0.012, 1.135, Math.sin(a) * 0.012); B.add(loft([lo, lo.clone().lerp(hi, 0.5), hi], () => [0.0018, 0.0018], 2, 4, false), M.iron, null, iron); }
   // grate: rim + 12 radial bars + inner ring
   B.add(torus(0.28, 0.008, 6, 40), M.iron, T(0, 0.8, 0, Math.PI / 2, 0, 0), iron);
   B.add(torus(0.1, 0.006, 6, 24), M.iron, T(0, 0.8, 0, Math.PI / 2, 0, 0), iron);
@@ -462,24 +482,40 @@ export function buildWoodPile(textures) {
 
 // fishing rod held in first-person
 export function buildRod() {
-  const g = new THREE.Group();
-  const cork = new THREE.MeshStandardMaterial({ color: 0x9c7a50, roughness: 0.9 });
-  const blank = new THREE.MeshStandardMaterial({ color: 0x1b2430, metalness: 0.3, roughness: 0.35 });
-  const h = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.35, 10), cork); h.position.y = 0.17; g.add(h);
-  const b = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.012, 2.1, 8), blank); b.position.y = 1.4; g.add(b);
-  const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 16), new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9, roughness: 0.3 }));
-  reel.rotation.z = Math.PI / 2; reel.position.set(0.03, 0.3, 0); g.add(reel);
+  // spinning rod held in first person: cork split grip, reel seat, fixed-spool reel with handle + bail, tapered
+  // blank with 6 guides and wraps. Rod space: butt at y=0, tip at y=2.45 (viewmodel.tip).
+  const g = new THREE.Group(), M = kitMaterials(), B = new Batch();
+  const blank = 0x1b2430, wrap = 0xb83a22;
+  B.add(cyl(0.019, 0.021, 0.2, 14), M.wood, T(0, 0.1, 0), 0xc8a070, { shade: (q, n, c) => { if (((q.y * 90) | 0) % 3 === 0) c.multiplyScalar(0.88); } }); // rear cork
+  B.add(cyl(0.017, 0.017, 0.09, 14), M.metal, T(0, 0.245, 0), 0x2a2e33); // reel seat
+  B.add(cyl(0.018, 0.016, 0.1, 14), M.wood, T(0, 0.34, 0), 0xc8a070); // fore grip
+  B.add(cyl(0.004, 0.012, 2.06, 10), M.paint, T(0, 1.42, 0), blank, { shade: (q, n, c) => { c.multiplyScalar(0.9 + 0.2 * Math.max(0, n.x)); } });
+  B.add(sphere(0.004, 6, 4), M.metal, T(0, 2.45, 0), 0xc0c0c0); // tip top
+  for (let i = 0; i < 6; i++) {
+    const y = 0.62 + (1 - Math.pow(1 - i / 5, 1.4)) * 1.75, r = 0.018 - i * 0.0024, rb = 0.012 - i * 0.0014;
+    B.add(cyl(rb + 0.0012, rb + 0.0012, 0.03, 8), M.paint, T(0, y, 0), wrap); // thread wrap
+    B.add(cyl(0.0012, 0.0012, r * 1.4, 4), M.metal, T(0.0, y, rb + r * 0.7, Math.PI / 2, 0, 0), 0xb0b4b8); // foot
+    B.add(torus(r, 0.0016, 4, 14), M.metal, T(0, y + 0.004, rb + r * 1.4 + r, 0, 0, 0), 0xb0b4b8); // ring
+  }
+  // fixed-spool reel under the rod (at +z)
+  B.with(T(0, 0.25, 0.045), () => {
+    B.add(box(0.012, 0.012, 0.05), M.metal, T(0, 0, -0.02), 0x3a3e42); // stem
+    B.add(cyl(0.03, 0.028, 0.045, 18), M.metal, T(0, 0.02, 0.03), 0x3a3e42); // body
+    B.add(cyl(0.026, 0.026, 0.03, 18), M.metal, T(0, 0.055, 0.03), 0xc8ccd0); // spool
+    B.add(cyl(0.022, 0.022, 0.028, 18), M.plastic, T(0, 0.055, 0.03), 0xe8e4d0); // line on spool
+    B.add(torus(0.032, 0.002, 4, 18, Math.PI), M.metal, T(0, 0.07, 0.03, Math.PI / 2, 0, 0), 0xd0d4d8); // bail
+    B.add(cyl(0.003, 0.003, 0.05, 6).rotateZ(Math.PI / 2), M.metal, T(0.04, 0.02, 0.03), 0x3a3e42); // handle arm
+    B.add(cyl(0.006, 0.006, 0.02, 8), M.plastic, T(0.065, 0.02, 0.045, Math.PI / 2, 0, 0), 0x111111); // knob
+  });
+  B.build(g, 'rod');
   return g;
 }
 
 export function buildAxe(textures) {
-  const g = new THREE.Group();
-  const wood = new THREE.MeshStandardMaterial({ color: 0x8a6238, roughness: 0.6 });
-  const steel = new THREE.MeshStandardMaterial({ color: 0x777d82, metalness: 1, roughness: 0.3 });
-  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.02, 0.7, 10), wood); handle.position.y = 0.35; g.add(handle);
-  const shape = new THREE.Shape(); shape.moveTo(0, 0.03); shape.lineTo(0.14, 0.07); shape.quadraticCurveTo(0.17, 0, 0.14, -0.07); shape.lineTo(0, -0.03); shape.lineTo(-0.04, -0.025); shape.lineTo(-0.04, 0.025);
-  const head = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.025, bevelEnabled: true, bevelSize: 0.004, bevelThickness: 0.004 }), steel);
-  head.position.set(0, 0.66, -0.0125); g.add(head);
+  // same axe model as the one stuck in the chopping block (campdetail addAxe): hickory handle, forged head
+  const g = new THREE.Group(), M = kitMaterials(textures), B = new Batch();
+  addAxe(B, M, new THREE.Matrix4());
+  B.build(g, 'axe');
   return g;
 }
 
