@@ -250,7 +250,9 @@ export class Water {
       .multiply(pm).multiply(m.matrixWorldInverse);
 
     this.mesh.visible = false;
-    if (this.extraHide?.length) hide = hide.concat(this.extraHide); // screen-space particles (splashes, dust) must not be mirrored
+    // extra objects that must not be mirrored (rain splashes, dust motes, leaves: camera-relative particles)
+    const xh = this.extraHide, xv = this._xv || (this._xv = []);
+    if (xh) for (let i = 0; i < xh.length; i++) { xv[i] = xh[i].visible; xh[i].visible = false; }
     const vis = hide.map((o) => { const v = o.visible; o.visible = false; return v; });
     const shadowAuto = r.shadowMap.autoUpdate; r.shadowMap.autoUpdate = false;
     const prevTM = r.toneMapping; r.toneMapping = THREE.NoToneMapping;
@@ -261,6 +263,7 @@ export class Water {
     r.toneMapping = prevTM;
     r.shadowMap.autoUpdate = shadowAuto;
     hide.forEach((o, i) => (o.visible = vis[i]));
+    if (xh) for (let i = 0; i < xh.length; i++) xh[i].visible = xv[i];
     this.mesh.visible = true;
   }
 }
