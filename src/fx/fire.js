@@ -182,7 +182,7 @@ export class Campfire {
   // a few sparks from the ferro rod, even while the fire is not lit
   sparkBurst(n = 6) { this.burst = (this.burst || 0) + n; }
 
-  addFuel(v) { this.fuel = Math.min(1.2, Math.max(0, this.fuel + v)); }
+  addFuel(v) { if (Number.isFinite(v)) this.fuel = Math.min(1.2, Math.max(0, this.fuel + v)); }
   ignite() { if (this.fuel > 0.05) this.lit = true; return this.lit; }
   setPixelRatio(pr) { this.prU.value = pr; }
   // resizing mapSize has no effect once the shadow map exists -> dispose it so it is recreated
@@ -193,6 +193,10 @@ export class Campfire {
   }
 
   update(dt, wind = this._wind, rain = 0) {
+    // a single NaN dt / wind / rain permanently poisoned fuel + intensity (fire stuck NaN = invisible, light NaN)
+    if (!Number.isFinite(dt) || dt < 0) dt = 0;
+    if (!Number.isFinite(rain)) rain = 0;
+    if (!wind || !Number.isFinite(wind.x) || !Number.isFinite(wind.y)) wind = this._wind;
     this.time += dt;
     if (this.lit) {
       this.fuel -= dt * (1 / 600) * (1 + rain * 2); // ~10 min real time per full load
