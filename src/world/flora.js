@@ -239,7 +239,7 @@ function reedClump(rnd, n = 22, cattails = 3) {
   const blades = [], heads = [];
   for (let k = 0; k < n; k++) {
     const h = 0.9 + rnd() * 0.9, w = 0.012 + rnd() * 0.01;
-    const b = new THREE.PlaneGeometry(w, h, 1, 4); b.translate(0, h / 2, 0);
+    const b = new THREE.PlaneGeometry(w, h, 1, 3); b.translate(0, h / 2, 0);
     const p = b.attributes.position, lean = (rnd() - 0.2) * 0.35;
     for (let i = 0; i < p.count; i++) { const t = p.getY(i) / h; p.setX(i, p.getX(i) * (1 - t * 0.9)); p.setZ(i, lean * t * t * h); }
     b.rotateY(rnd() * Math.PI); b.translate((rnd() - 0.5) * 0.5, -0.05, (rnd() - 0.5) * 0.5);
@@ -249,7 +249,7 @@ function reedClump(rnd, n = 22, cattails = 3) {
   for (let k = 0; k < cattails; k++) {
     const h = 1.3 + rnd() * 0.5, x = (rnd() - 0.5) * 0.35, z = (rnd() - 0.5) * 0.35;
     const st = new THREE.CylinderGeometry(0.004, 0.006, h, 4, 1, true); st.translate(x, h / 2 - 0.05, z); blades.push(st);
-    const hd = new THREE.CapsuleGeometry(0.016, 0.13, 2, 6); hd.translate(x, h - 0.2, z); heads.push(hd);
+    const hd = new THREE.CapsuleGeometry(0.016, 0.13, 1, 5); hd.translate(x, h - 0.2, z); heads.push(hd);
     const tip = new THREE.CylinderGeometry(0.001, 0.002, 0.12, 3, 1, true); tip.translate(x, h + 0.02, z); blades.push(tip);
   }
   return { blades: mergeGeometries(blades), heads: heads.length ? mergeGeometries(heads) : null };
@@ -452,7 +452,14 @@ export class Flora {
 
     // ---- shoreline: reeds + cattails, pebbles, driftwood, lilies
     const reeds = [0, 1].map(() => reedClump(rnd, 18 + ((rnd() * 10) | 0), (rnd() * 4) | 0));
-    const nReed = def('reed', reeds.map((r) => [{ geo: r.blades, mat: reedMat, castShadow: true }, ...(r.heads ? [{ geo: r.heads, mat: cattailMat, castShadow: true }] : [])]), 110);
+    // reeds: full clump near, a sparse 6-blade clump (same silhouette colour) far away
+    const reedFar = [0, 1].map(() => reedClump(rnd, 6, 1));
+    const nReed = reeds.length;
+    reeds.forEach((r, v) => S.defineKind('reed' + v, [
+      { dist: 40, parts: [{ geo: r.blades, mat: reedMat, castShadow: true }, ...(r.heads ? [{ geo: r.heads, mat: cattailMat, castShadow: true }] : [])] },
+      { dist: 110, parts: [{ geo: reedFar[v].blades, mat: reedMat, castShadow: false }, { geo: reedFar[v].heads, mat: cattailMat, castShadow: false }] },
+    ], { cullDist: 110 }));
+    this.stats.reed = 0;
     const nPad = def('lilypad', [0].map(() => [{ geo: lilyPad(rnd), mat: padMat, castShadow: false }]), 90);
     const heart = new THREE.SphereGeometry(0.018, 8, 4); heart.scale(1, 0.6, 1); heart.translate(0, 0.035, 0);
     const nLily = def('lily', [[{ geo: lilyFlower(), mat: lilyMat, castShadow: false }, { geo: heart, mat: lilyHeart, castShadow: false }]], 70);
