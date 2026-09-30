@@ -425,7 +425,7 @@ export class Flora {
     for (let i = 0; i < Math.round(1800 * gq); i++) { const p = forestSpot(110, 0.3); if (p) add('litter', nLitter, p[0], p[1], 0.7 + rnd() * 1.1, { align: 1, color: col.setHSL(0.08, 0.2, 0.55 + rnd() * 0.3) }); }
     for (let i = 0; i < Math.round(1100 * gq); i++) { const p = forestSpot(90, 0.45); if (p) add('cone', nCone, p[0], p[1], 0.8 + rnd() * 0.5, { align: 1 }); }
     for (let i = 0; i < Math.round(900 * gq); i++) { const p = forestSpot(90, 0.25); if (p) add('twig', nTwig, p[0], p[1], 0.7 + rnd() * 0.8, { align: 1, sink: 0.005 }); }
-    for (let i = 0; i < Math.round(700 * gq); i++) { const p = forestSpot(120, 0.5); if (p) add('moss', nMoss, p[0], p[1], 0.6 + rnd() * 1.6, { align: 1, sink: 0.02, color: col.setHSL(0.24 + rnd() * 0.05, 0.4, 0.4 + rnd() * 0.25) }); }
+    for (let i = 0; i < Math.round(900 * gq); i++) { const p = forestSpot(120, 0.5); if (p) add('moss', nMoss, p[0], p[1], 1.2 + rnd() * 2.2, { align: 1, sink: 0.03, color: col.setHSL(0.2 + rnd() * 0.07, 0.5, 0.75 + rnd() * 0.2) }); }
     for (let i = 0; i < 110; i++) { const p = forestSpot(100, 0.35); if (p) add(rnd() < 0.45 ? 'amanita' : 'bolete', 1, p[0], p[1], 0.8 + rnd() * 0.6, { align: 0.6 }); }
     // saplings: young spruces at forest edges / clearings (tiny instances of the real LOD'd tree kinds)
     this.stats.sapling = 0;
