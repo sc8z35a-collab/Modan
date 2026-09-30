@@ -20,6 +20,8 @@ export class LensUI {
       const go = (e) => { e.preventDefault(); e.stopPropagation(); this.g.audio?.click?.(); this.lens.setZoom(p); };
       b.addEventListener('touchstart', go, { passive: false });
       b.addEventListener('mousedown', (e) => { if (e.button === 0) go(e); });
+      // chips sit at their true log position next to the strip (so the knob lines up with the chip it snaps to)
+      b.style.top = `${(1 - toT(p)) * 100}%`;
       pr.appendChild(b);
       return b;
     });
