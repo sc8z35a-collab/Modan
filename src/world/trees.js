@@ -107,7 +107,7 @@ export function windify(mat, U, strength = 1, isLeaf = false) {
           vec2 tsz = vec2(textureSize(map, 0));
           vec2 dx = dFdx(vMapUv * tsz), dy = dFdy(vMapUv * tsz);
           float lod = max(0.0, 0.5 * log2(max(dot(dx, dx), dot(dy, dy))));
-          diffuseColor.a *= 1.0 + lod * 0.28;
+          diffuseColor.a *= 1.0 + lod * 0.45; // stronger now that alphaToCoverage is off
         }
         #endif
         #include <alphatest_fragment>`);
