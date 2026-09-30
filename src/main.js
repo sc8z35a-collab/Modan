@@ -147,6 +147,8 @@ class Game {
       await fetch('/__snap', { method: 'POST', body: JSON.stringify({ name: sh.name, png, info: { fps: $('fps').textContent, tris: i.render.triangles, calls: i.render.calls, trees: this.world.treeCount, ua: navigator.userAgent, gpu: this.gpuName() } }) }).catch(() => {});
     }
     document.title = 'SNAP DONE'; this.snapping = false;
+    // external QA (PlaywrightConsoleCapture wait_for_selector="#snapdone") waits for this instead of a fixed timer
+    const d = document.createElement('i'); d.id = 'snapdone'; d.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px'; document.body.appendChild(d);
   }
 
   gpuName() {
