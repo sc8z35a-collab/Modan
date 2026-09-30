@@ -486,7 +486,7 @@ class Game {
 
     // world systems
     this.world.update(dt, this.camera, lens.lodBias());
-    this.grass.update(dt, this.camera.position, this.player.pos, night, this.world.U.uWind.value);
+    this.grass.update(dt, this.camera.position, this.player.pos, night, this.world.U.uWind.value, lens.zoom);
     this.fire.update(dt, this.world.U.uWind.value, this.rain);
     this.fireLogs.userData.charred && (this.fireLogs.userData.charred.emissiveIntensity = this.fire.intensity * 2.5);
     if (this.fire.fuel <= 0.01 && !this.fire.lit) this.fireLogs.visible = false;

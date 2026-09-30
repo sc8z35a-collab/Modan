@@ -14,6 +14,7 @@ export class Grass {
       tNoise: { value: noiseTex },
       uWind: { value: new THREE.Vector2(0.8, 0.35) },
       uNight: { value: 0 },
+      uZoom: { value: 1 }, // lens magnification: far blades are only widened by their ON-SCREEN distance (dist / zoom)
     };
     this.baseDensity = Math.max(1e-3, density);
     this.layers = [];
@@ -54,7 +55,7 @@ export class Grass {
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
           ${WORLD_DATA_GLSL}
-          attribute vec4 aOff; uniform float uSize, uScale, uTime; uniform vec3 uCam, uPlayer; uniform vec2 uWind;
+          attribute vec4 aOff; uniform float uSize, uScale, uTime; uniform vec3 uCam, uPlayer; uniform vec2 uWind; uniform float uZoom;
           uniform sampler2D tNoise;
           varying float vT; varying vec3 vTint; varying float vAO; varying vec3 vWP;
           mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
@@ -78,7 +79,7 @@ export class Grass {
         `)
         .replace('#include <begin_vertex>', `
           float t = position.y; vT = t;
-          float width = 0.055 * uScale * (0.7 + aOff.w*0.6) * mix(1.0, 1.6, smoothstep(10.0, 40.0, dist));
+          float width = 0.055 * uScale * (0.7 + aOff.w*0.6) * mix(1.0, 1.6, smoothstep(10.0, 40.0, dist / max(uZoom, 1.0)));
           vec3 p = vec3(position.x * width, 0.0, 0.0);
           p.xz = rot(ang) * p.xz;
           // curvature + wind
@@ -131,8 +132,9 @@ export class Grass {
     return mesh;
   }
 
-  update(dt, camPos, playerPos, night, wind) {
+  update(dt, camPos, playerPos, night, wind, zoom = 1) {
     const u = this.uniforms;
+    u.uZoom.value = zoom;
     if (wind) u.uWind.value.copy(wind); // grass used a constant wind and ignored the world's gusts
     u.uTime.value += dt;
     u.uCam.value.copy(camPos);
