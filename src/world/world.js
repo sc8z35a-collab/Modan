@@ -8,6 +8,7 @@ import { createTreeKinds, windify } from './trees.js';
 import { mulberry32, smoothstep } from '../core/noise.js';
 import { posHash } from './props.js';
 import { Flora } from './flora.js';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // resolve assets against the deploy base (works at / and at a sub-path like /Modan/)
 // VITE_ASSET_BASE lets the Pages build (tools/build-pages.mjs) load the big textures/models straight from
@@ -272,7 +273,7 @@ export class World {
     // club stem with net pattern, bun-shaped brown cap, pale pore layer). Deliberately NOT the red fly agaric of
     // the decorative flora, so what you can eat is visually distinct from what you shouldn't.
     // (each spawn builds its own geometry because interactions.js disposes them on pickup)
-    const chantMat = new THREE.MeshStandardMaterial({ color: 0xe8a23a, roughness: 0.6, vertexColors: true });
+    const chantMat = new THREE.MeshStandardMaterial({ color: 0xf0a42a, roughness: 0.55, vertexColors: true, side: THREE.DoubleSide });
     const porciniCap = new THREE.MeshPhysicalMaterial({ color: 0x7a4722, roughness: 0.42, clearcoat: 0.25, clearcoatRoughness: 0.6 });
     const porciniStem = new THREE.MeshStandardMaterial({ color: 0xe2d6bc, roughness: 0.85, vertexColors: true });
     const porciniPores = new THREE.MeshStandardMaterial({ color: 0xd8d09a, roughness: 0.9 });
@@ -291,9 +292,10 @@ export class World {
     const chanterelle = (s) => {
       // lathe profile: thin stem flaring into a wavy funnel cap
       const pts = [];
-      for (let i = 0; i <= 12; i++) { const t = i / 12; pts.push(new THREE.Vector2(0.006 + Math.pow(t, 2.2) * 0.05 + t * 0.006, t * 0.075)); }
-      pts.push(new THREE.Vector2(0.066, 0.078), new THREE.Vector2(0.05, 0.072), new THREE.Vector2(0.001, 0.066));
-      const g = new THREE.LatheGeometry(pts, 20);
+      // outer surface bottom->rim, then the upper surface curving DOWN into a depressed centre (true funnel)
+      for (let i = 0; i <= 12; i++) { const t = i / 12; pts.push(new THREE.Vector2(0.007 + Math.pow(t, 2.4) * 0.05 + t * 0.005, t * 0.072)); }
+      pts.push(new THREE.Vector2(0.064, 0.077), new THREE.Vector2(0.06, 0.08), new THREE.Vector2(0.045, 0.078), new THREE.Vector2(0.025, 0.07), new THREE.Vector2(0.008, 0.062), new THREE.Vector2(0.001, 0.06));
+      const g = mergeVertices(new THREE.LatheGeometry(pts, 28));
       const p = g.attributes.position, c = new Float32Array(p.count * 3), ph = rnd() * 6.28;
       for (let i = 0; i < p.count; i++) {
         const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x), r = Math.hypot(x, z);
