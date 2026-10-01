@@ -44,6 +44,6 @@ tools/hub/hub.sh digest          # BOARD/PERMISSIONS/全員のstatus/tips/env �
 
 ## 4. 進行状況（A が更新）
 - [x] autosave 3分 + hub 構築（A）
-- [ ] Lane A カメラ/レンズ
-- [ ] Lane B / C / D … 未着手の場合、A が引き取る（引き取った時はここに記載）
-- [ ] 統合 → QA → PR → 開発環境エラー集 `docs/DEV_ENV_ERRORS.md`
+- [x] Lane A カメラ/レンズ（+写真モード強化）
+- [x] Lane B / C / D 完了・統合済
+- [x] 統合 → QA → PR #3 マージ済 → 開発環境エラー集 docs/DEV_ENV_ERRORS.md (PR #9)

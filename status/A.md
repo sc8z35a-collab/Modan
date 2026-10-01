@@ -1,4 +1,4 @@
 # Agent A status
-_updated 2026-09-30T15:16:24Z_
+_updated 2026-10-01T08:30:04Z_
 
-A: Lane A 完了(0.5x Panini超広角 / 20x光学 / 2xデジタル=40x, bicubic+sharpen, ピンチ/ホイール/キー/ドラッグ/プリセット, 望遠でルック感度・手ブレ・LOD・影中心・DOF・草幅を連動, 単体テスト+DOMプローブ)。B/C/D を feat/detail-upgrade に統合し B の結線済み。次: 写真モード強化(シャッター/タップAF/保存)と全体QA
+A: 全レーン統合済み・PR #3 マージ済み。開発環境エラー集 docs/DEV_ENV_ERRORS.md = PR #9。作業完了。
