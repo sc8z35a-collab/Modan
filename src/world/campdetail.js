@@ -417,6 +417,24 @@ function dockKit(B, M, R) {
   B.add(tube([[0.55 + 0.07, y + 0.035, -14.7], [0.75, y + 0.03, -14.95], [0.86, y + 0.055, -15.2], [0.95, y + 0.02, -15.35]], 0.011, 16, 6), M.rope, null, 0xc8b890);
 }
 
+// Clear grass (and flora) density under prop footprints in the baked world-data texture (G channel). The grass
+// shader reads that texture, so tent floors / cooler / table no longer have blades growing through them.
+// fp: [{x, z, r}] world-space circles. The texture is ~1.4m per texel -> soft edge of one texel.
+export function clearGrass(worldData, fp) {
+  if (!worldData?.data) return;
+  const { data, res, size } = worldData, cs = size / (res - 1);
+  for (const c of fp) {
+    const i0 = Math.floor((c.x - c.r - cs) / cs + (res - 1) / 2), i1 = Math.ceil((c.x + c.r + cs) / cs + (res - 1) / 2);
+    const j0 = Math.floor((c.z - c.r - cs) / cs + (res - 1) / 2), j1 = Math.ceil((c.z + c.r + cs) / cs + (res - 1) / 2);
+    for (let j = Math.max(0, j0); j <= Math.min(res - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(res - 1, i1); i++) {
+      const x = (i / (res - 1) - 0.5) * size, z = (j / (res - 1) - 0.5) * size, d = Math.hypot(x - c.x, z - c.z);
+      const k = 1 - smooth(c.r, c.r + cs, d); if (k <= 0) continue;
+      data[(j * res + i) * 4 + 1] *= 1 - k;
+    }
+  }
+  worldData.tex.needsUpdate = true;
+}
+
 // ---------------------------------------------------------------------------------------------- main
 export function buildCampDetails(ctx) {
   const { scene, textures, U, heightAt, colliders } = ctx;
@@ -429,7 +447,8 @@ export function buildCampDetails(ctx) {
   const B = new Batch();
   const R = rng(4242);
   const group = new THREE.Group(); group.name = 'campDetails';
-  const addCol = (x, z, r, tag) => colliders?.add?.(x, z, r, tag);
+  const footprints = [];
+  const addCol = (x, z, r, tag) => { footprints.push({ x, z, r: r * 0.9 }); return colliders?.add?.(x, z, r, tag); };
 
   // place a builder at world x,z with yaw ry; gh() gives the local ground height
   const place = (x, z, ry, fn, lift = 0) => {
@@ -491,6 +510,10 @@ export function buildCampDetails(ctx) {
 
   // two clusters: camp (~20m) and dock (~40m away). One world-spanning merged mesh per material defeated frustum
   // and shadow-camera culling (the dock items were drawn into the shadow map while standing at the fire).
+  // grass-free footprints: tent (floor + vestibule), table, chair, log seats, woodpile and our own props
+  footprints.push({ x: tO.x, z: tO.z, r: 1.35 }, { x: tO.x + Math.sin(tR) * 1.5, z: tO.z + Math.cos(tR) * 1.5, r: 0.8 });
+  for (const f of ctx.extraFootprints || []) footprints.push(f);
+  clearGrass(ctx.worldData, footprints);
   const meshes = B.build(group, 'camp');
   // dock kit (same placement maths as main.js buildCamp)
   if (ctx.dock) {
