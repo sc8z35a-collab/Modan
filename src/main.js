@@ -235,7 +235,8 @@ class Game {
     // [lane B] camp detail props (merged per material, ~15 draw calls)
     this.campDetails = buildCampDetails({ scene: this.scene, textures: tx, U, heightAt, colliders: this.world.colliders, camp: C,
       firePos: new THREE.Vector3(fx, heightAt(fx, fz), fz), tent: this.tent, tentOrigin: { x: tx0, z: tz0 }, tentRot: 0.9, poleA, dock: this.dock,
-      dockEnd: this.dockEnd, boat: this.boat, table });
+      dockEnd: this.dockEnd, boat: this.boat, table, worldData: this.world.worldData, // [lane B] clears grass under props
+      extraFootprints: this.world.colliders.list.filter((c) => ['tent', 'seat', 'chair', 'woodpile', 'table', 'fire'].includes(c.tag)).map((c) => ({ x: c.x, z: c.z, r: c.r * 0.85 })) });
   }
 
   buildStringLights(a, b) {
